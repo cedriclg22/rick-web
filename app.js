@@ -42,6 +42,55 @@ function saveState(){
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
 }
 
+/* ============ AUDIO STORAGE (IndexedDB) ============ */
+const AUDIO_DB_NAME = 'rick_audio_db';
+const AUDIO_STORE = 'audio';
+function openAudioDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(AUDIO_DB_NAME, 1);
+    req.onupgradeneeded = ()=>{ req.result.createObjectStore(AUDIO_STORE); };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+function saveAudioBlob(id, blob){
+  return openAudioDB().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(AUDIO_STORE, 'readwrite');
+    tx.objectStore(AUDIO_STORE).put(blob, id);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  }));
+}
+function getAudioBlob(id){
+  return openAudioDB().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(AUDIO_STORE, 'readonly');
+    const req = tx.objectStore(AUDIO_STORE).get(id);
+    req.onsuccess = ()=>resolve(req.result || null);
+    req.onerror = ()=>reject(req.error);
+  }));
+}
+
+/* ============ PLAYBACK ============ */
+const playerAudio = new Audio();
+let playingId = null;
+function setPlayIcon(id, playing){
+  document.querySelectorAll(`[data-play-id="${id}"]`).forEach(btn=>{ btn.textContent = playing ? '⏸' : '▶'; });
+}
+playerAudio.addEventListener('ended', ()=>{ if(playingId){ setPlayIcon(playingId, false); playingId = null; } });
+playerAudio.addEventListener('pause', ()=>{ if(playingId){ setPlayIcon(playingId, false); } });
+
+function togglePlay(id){
+  if(playingId === id && !playerAudio.paused){ playerAudio.pause(); return; }
+  getAudioBlob(id).then(blob=>{
+    if(!blob){ alert("Pas d'enregistrement audio disponible pour ce mémo."); return; }
+    playerAudio.pause();
+    playerAudio.src = URL.createObjectURL(blob);
+    playingId = id;
+    playerAudio.play();
+    setPlayIcon(id, true);
+  });
+}
+
 /* ============ NAV ============ */
 const views = document.querySelectorAll('.view');
 const navBtns = document.querySelectorAll('.navpill');
@@ -113,12 +162,17 @@ function renderMemoGrid(){
 
   document.getElementById('recentCount').textContent = list.length;
   memoGrid.innerHTML = list.map(m=>{
-    const statusHtml = m.analyzed
-      ? `<div class="memo-status analyzed">${escapeHtml(m.summary || 'Analysé')}</div>`
-      : `<div class="memo-status">✨ Non analysé — touchez pour lancer l'IA</div>`;
+    const statusHtml = m.transcribing
+      ? `<div class="memo-status transcribing">⏳ Transcription en cours (Whisper local)…</div>`
+      : m.analyzed
+        ? `<div class="memo-status analyzed">${escapeHtml(m.summary || 'Analysé')}</div>`
+        : m.whisperFailed
+          ? `<div class="memo-status">⚠️ Whisper local injoignable — transcription micro utilisée. Touchez pour lancer l'IA</div>`
+          : `<div class="memo-status">✨ Non analysé — touchez pour lancer l'IA</div>`;
     const tag = m.category ? `<span class="cat-tag ${m.category}">${CATS.find(c=>c.id===m.category)?.name||''}</span>` : '';
+    const playIcon = playingId===m.id && !playerAudio.paused ? '⏸' : '▶';
     return `<div class="memo-card" data-id="${m.id}">
-      <div class="memo-play">▶</div>
+      <div class="memo-play" data-play-id="${m.id}" ${m.hasAudio ? '' : 'data-nodata="1"'}>${playIcon}</div>
       <div class="memo-meta">${timeAgoLabel(m.createdAt)}</div>
       <div class="memo-title">${escapeHtml(m.title)}</div>
       ${statusHtml}
@@ -139,6 +193,15 @@ function renderMemoGrid(){
 
   memoGrid.querySelectorAll('.memo-card').forEach(el=>{
     el.addEventListener('click', ()=> openDetail(el.dataset.id));
+  });
+  memoGrid.querySelectorAll('.memo-play').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const id = btn.dataset.playId;
+      const m = state.memos.find(x=>x.id===id);
+      if(!m || !m.hasAudio){ alert("Pas d'enregistrement audio disponible pour ce mémo."); return; }
+      togglePlay(id);
+    });
   });
 }
 
@@ -199,6 +262,23 @@ function analyzeMemo(id){
   saveState();
 }
 
+function renderCatPicker(m){
+  const picker = document.getElementById('catPicker');
+  picker.innerHTML = CATS.map(c=>
+    `<button class="cat-chip ${m.category===c.id ? 'active '+c.id : ''}" data-cat="${c.id}">${c.icon} ${c.name}</button>`
+  ).join('');
+  picker.querySelectorAll('.cat-chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const mm = state.memos.find(x=>x.id===detailId);
+      if(!mm) return;
+      mm.category = mm.category === btn.dataset.cat ? null : btn.dataset.cat;
+      saveState();
+      openDetail(detailId);
+      renderLibrary();
+    });
+  });
+}
+
 /* ============ DETAIL SHEET ============ */
 const detailOverlay = document.getElementById('detailOverlay');
 let detailId = null;
@@ -215,8 +295,15 @@ function openDetail(id){
     badge.textContent = CATS.find(c=>c.id===m.category)?.name || '';
   } else { badge.hidden = true; badge.textContent=''; }
   document.getElementById('detailTitle').textContent = m.title;
-  document.getElementById('detailStatus').textContent = m.analyzed ? '✨ Analysé par l\'IA' : '✨ Non analysé — touchez pour lancer l\'IA';
-  document.getElementById('detailTranscript').textContent = m.transcript || '(aucune transcription)';
+  document.getElementById('detailStatus').textContent = m.transcribing
+    ? '⏳ Transcription en cours (Whisper local)…'
+    : m.analyzed
+      ? '✨ Analysé par l\'IA'
+      : m.whisperFailed
+        ? '⚠️ Whisper local injoignable — transcription micro utilisée'
+        : '✨ Non analysé — touchez pour lancer l\'IA';
+  const dt = document.getElementById('detailTranscript');
+  dt.textContent = m.transcript || (m.transcribing ? '…' : '(aucune transcription — touchez pour en écrire une)');
 
   const sumBlock = document.getElementById('detailSummaryBlock');
   const actBlock = document.getElementById('detailActionsBlock');
@@ -228,11 +315,40 @@ function openDetail(id){
   } else {
     sumBlock.hidden = true; actBlock.hidden = true;
   }
-  document.getElementById('btnAnalyze').hidden = m.analyzed;
+
+  renderCatPicker(m);
+
+  const playBtn = document.getElementById('btnDetailPlay');
+  playBtn.dataset.playId = m.id;
+  playBtn.textContent = playingId===m.id && !playerAudio.paused ? '⏸' : '▶';
+  playBtn.style.opacity = m.hasAudio ? '1' : '.4';
+
+  const analyzeBtn = document.getElementById('btnAnalyze');
+  analyzeBtn.hidden = m.transcribing;
+  analyzeBtn.textContent = m.analyzed ? "🔁 Ré-analyser" : "✨ Lancer l'analyse IA";
   detailOverlay.hidden = false;
 }
 document.getElementById('detailClose').addEventListener('click', ()=> detailOverlay.hidden = true);
 detailOverlay.addEventListener('click', (e)=>{ if(e.target===detailOverlay) detailOverlay.hidden = true; });
+
+document.getElementById('btnDetailPlay').addEventListener('click', ()=>{
+  const m = state.memos.find(x=>x.id===detailId);
+  if(!m || !m.hasAudio){ alert("Pas d'enregistrement audio disponible pour ce mémo."); return; }
+  togglePlay(detailId);
+});
+
+document.getElementById('detailTranscript').addEventListener('blur', ()=>{
+  const m = state.memos.find(x=>x.id===detailId);
+  if(!m) return;
+  const newText = document.getElementById('detailTranscript').textContent.trim();
+  const placeholder = newText === '(aucune transcription — touchez pour en écrire une)';
+  const finalText = placeholder ? '' : newText;
+  if(finalText !== m.transcript){
+    m.transcript = finalText;
+    saveState();
+  }
+});
+
 document.getElementById('btnAnalyze').addEventListener('click', ()=>{
   const btn = document.getElementById('btnAnalyze');
   btn.textContent = '✨ Analyse en cours…';
@@ -452,23 +568,60 @@ document.getElementById('mapSheetToggle').addEventListener('click', ()=>{
 });
 
 /* ============ RECORDING ============ */
+const WHISPER_URL = 'http://127.0.0.1:5959';
+
 const recordOverlay = document.getElementById('recordOverlay');
 const recTimer = document.getElementById('recTimer');
 const transcriptText = document.getElementById('transcriptText');
 const waveBars = document.getElementById('waveBars');
+const btnTabAudio = document.getElementById('btnTabAudio');
 
 let recognizer = null;
-let mediaStream = null;
+let mediaStream = null;       // mic stream
+let displayStream = null;     // tab/screen audio stream (visio)
 let audioCtx = null, analyser = null, meterRAF = null;
+let mediaRecorder = null, recordedChunks = [];
 let recStartTime = null, recElapsed = 0, timerInterval = null, isPaused = false;
 let finalTranscript = '';
+let includeTabAudio = false;
+let whisperAvailable = null; // cached health check result
 
 // build wave bars
 for(let i=0;i<40;i++){ const s=document.createElement('span'); s.style.height='6px'; waveBars.appendChild(s); }
 
+// transcript is always editable — lets users type/correct when live recognition
+// is unavailable (e.g. Safari has no Web Speech support) or wrong
+transcriptText.contentEditable = 'true';
+transcriptText.addEventListener('focus', ()=>{
+  if(transcriptText.classList.contains('transcript-placeholder')){
+    transcriptText.textContent = '';
+    transcriptText.classList.remove('transcript-placeholder');
+  }
+});
+transcriptText.addEventListener('input', ()=>{
+  finalTranscript = transcriptText.textContent;
+});
+
+function checkWhisperServer(){
+  return fetch(WHISPER_URL + '/health', { mode:'cors' })
+    .then(r=>r.ok)
+    .catch(()=>false)
+    .then(ok=>{ whisperAvailable = ok; return ok; });
+}
+checkWhisperServer();
+
+btnTabAudio.addEventListener('click', ()=>{
+  includeTabAudio = !includeTabAudio;
+  btnTabAudio.classList.toggle('active', includeTabAudio);
+  document.getElementById('tabAudioLabel').textContent = includeTabAudio
+    ? "Visio incluse — le partage sera demandé au démarrage"
+    : "Inclure le son d'un onglet (visio)";
+});
+
 function openRecordOverlay(){
   recordOverlay.hidden = false;
   finalTranscript = '';
+  recordedChunks = [];
   transcriptText.textContent = '';
   transcriptText.className = 'transcript-placeholder';
   transcriptText.textContent = 'Parlez… la transcription s\'affiche ici';
@@ -476,6 +629,7 @@ function openRecordOverlay(){
   recTimer.textContent = '00:00';
   document.getElementById('recStatusLabel').textContent = 'ENREGISTREMENT';
   document.getElementById('pauseLabel').textContent = 'Pause';
+  btnTabAudio.disabled = false;
   startRecording();
 }
 
@@ -485,6 +639,7 @@ function closeRecordOverlay(){
 }
 
 function startRecording(){
+  btnTabAudio.disabled = true;
   recStartTime = Date.now() - recElapsed*1000;
   timerInterval = setInterval(()=>{
     if(isPaused) return;
@@ -494,14 +649,30 @@ function startRecording(){
     recTimer.textContent = `${mm}:${ss}`;
   }, 250);
 
-  // mic meter
-  navigator.mediaDevices?.getUserMedia({ audio:true }).then(stream=>{
-    mediaStream = stream;
+  const wantTabAudio = includeTabAudio;
+
+  const micPromise = navigator.mediaDevices?.getUserMedia({ audio:true }) || Promise.reject(new Error('no getUserMedia'));
+  const displayPromise = wantTabAudio
+    ? navigator.mediaDevices.getDisplayMedia({ video:true, audio:true }).catch(()=>null)
+    : Promise.resolve(null);
+
+  Promise.all([micPromise, displayPromise]).then(([mic, display])=>{
+    mediaStream = mic;
+    displayStream = display && display.getAudioTracks().length ? display : null;
+    if(wantTabAudio && !displayStream){
+      document.getElementById('tabAudioLabel').textContent = "Son d'onglet indisponible (annulé ou pas d'audio partagé) — micro seul utilisé";
+    }
+    if(display && !displayStream){
+      display.getTracks().forEach(t=>t.stop());
+    }
+
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioCtx.createMediaStreamSource(stream);
+    const micSource = audioCtx.createMediaStreamSource(mic);
+
+    // meter (mic only, for a responsive visual)
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 128;
-    source.connect(analyser);
+    micSource.connect(analyser);
     const data = new Uint8Array(analyser.frequencyBinCount);
     const bars = waveBars.children;
     function tick(){
@@ -513,9 +684,23 @@ function startRecording(){
       meterRAF = requestAnimationFrame(tick);
     }
     tick();
-  }).catch(()=>{ /* mic denied: keep UI functional without meter */ });
 
-  // speech recognition
+    // mix mic (+ tab audio if present) into one recordable stream
+    const dest = audioCtx.createMediaStreamDestination();
+    micSource.connect(dest);
+    if(displayStream){
+      const displaySource = audioCtx.createMediaStreamSource(displayStream);
+      displaySource.connect(dest);
+    }
+
+    try{
+      mediaRecorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+      mediaRecorder.ondataavailable = (e)=>{ if(e.data && e.data.size>0) recordedChunks.push(e.data); };
+      mediaRecorder.start();
+    }catch(e){ mediaRecorder = null; }
+  }).catch(()=>{ /* mic denied: keep UI functional without meter/recording */ });
+
+  // speech recognition — live preview, mic only (Web Speech API cannot listen to a custom stream)
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(SR){
     recognizer = new SR();
@@ -533,7 +718,11 @@ function startRecording(){
       transcriptText.className = '';
       transcriptText.textContent = full || '…';
     };
-    recognizer.onerror = ()=>{};
+    recognizer.onerror = (e)=>{
+      if((e.error==='not-allowed' || e.error==='service-not-allowed') && transcriptText.classList.contains('transcript-placeholder')){
+        transcriptText.textContent = "Micro refusé pour la reconnaissance vocale — écrivez votre texte ici, ou réessayez avec Whisper local activé.";
+      }
+    };
     recognizer.onend = ()=>{
       if(!recordOverlay.hidden && !isPaused){
         try{ recognizer.start(); }catch(e){}
@@ -541,7 +730,7 @@ function startRecording(){
     };
     try{ recognizer.start(); }catch(e){}
   } else {
-    transcriptText.textContent = "Reconnaissance vocale non disponible dans ce navigateur — vous pourrez éditer le texte manuellement après.";
+    transcriptText.textContent = "Reconnaissance vocale live non disponible dans ce navigateur (essayez Chrome) — écrivez votre texte ici, ou activez Whisper local pour une transcription automatique après l'enregistrement.";
   }
 }
 
@@ -549,8 +738,10 @@ function stopRecording(){
   clearInterval(timerInterval);
   if(recognizer){ try{ recognizer.onend=null; recognizer.stop(); }catch(e){} recognizer=null; }
   if(meterRAF) cancelAnimationFrame(meterRAF);
+  if(mediaRecorder && mediaRecorder.state !== 'inactive'){ try{ mediaRecorder.stop(); }catch(e){} }
   if(audioCtx){ try{ audioCtx.close(); }catch(e){} audioCtx=null; }
   if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+  if(displayStream){ displayStream.getTracks().forEach(t=>t.stop()); displayStream=null; }
 }
 
 document.getElementById('btnMic').addEventListener('click', openRecordOverlay);
@@ -566,31 +757,92 @@ document.getElementById('btnPause').addEventListener('click', (e)=>{
   document.getElementById('recStatusLabel').textContent = isPaused ? 'EN PAUSE' : 'ENREGISTREMENT';
   if(isPaused){
     if(recognizer){ try{ recognizer.stop(); }catch(err){} }
+    if(mediaRecorder && mediaRecorder.state==='recording'){ try{ mediaRecorder.pause(); }catch(err){} }
   } else {
     recStartTime = Date.now() - recElapsed*1000;
     if(recognizer){ try{ recognizer.start(); }catch(err){} }
+    if(mediaRecorder && mediaRecorder.state==='paused'){ try{ mediaRecorder.resume(); }catch(err){} }
   }
 });
 
+function transcribeWithWhisper(memoId, blob){
+  const form = new FormData();
+  form.append('audio', blob, 'memo.webm');
+  return fetch(WHISPER_URL + '/transcribe', { method:'POST', body: form })
+    .then(r=>{ if(!r.ok) throw new Error('server error'); return r.json(); })
+    .then(data=>{
+      const m = state.memos.find(x=>x.id===memoId);
+      if(!m) return;
+      if(data.text){
+        m.transcript = data.text;
+        if(m.title === 'Nouveau mémo' || !m.title) m.title = guessTitle(data.text);
+      }
+      m.transcribing = false;
+      m.whisperFailed = false;
+      saveState();
+      if(currentView==='library') renderLibrary();
+      if(detailId===memoId && !detailOverlay.hidden) openDetail(memoId);
+    })
+    .catch(()=>{
+      const m = state.memos.find(x=>x.id===memoId);
+      if(!m) return;
+      m.transcribing = false;
+      m.whisperFailed = true;
+      saveState();
+      if(currentView==='library') renderLibrary();
+      if(detailId===memoId && !detailOverlay.hidden) openDetail(memoId);
+    });
+}
+
 document.getElementById('btnFinish').addEventListener('click', ()=>{
-  const transcript = (finalTranscript || (transcriptText.className==='' ? transcriptText.textContent : '')).trim();
+  const liveTranscript = transcriptText.classList.contains('transcript-placeholder') ? '' : transcriptText.textContent.trim();
+  const usedMix = includeTabAudio && displayStream;
+  const chunksRef = recordedChunks;
+  const hadRecorder = !!mediaRecorder;
   stopRecording();
+
   const memo = {
     id: 'm'+Date.now(),
-    title: guessTitle(transcript),
-    transcript,
+    title: guessTitle(liveTranscript),
+    transcript: liveTranscript,
     summary: '',
     actions: [],
     category: null,
     analyzed: false,
+    transcribing: false,
+    whisperFailed: false,
+    usedTabAudio: !!usedMix,
+    hasAudio: false,
     createdAt: new Date().toISOString(),
     duration: recElapsed,
   };
-  state.memos.push(memo);
-  saveState();
+
   recordOverlay.hidden = true;
-  showView('library');
-  renderLibrary();
+  includeTabAudio = false;
+  btnTabAudio.classList.remove('active');
+  document.getElementById('tabAudioLabel').textContent = "Inclure le son d'un onglet (visio)";
+
+  if(hadRecorder && chunksRef.length){
+    memo.transcribing = true;
+    state.memos.push(memo);
+    saveState();
+    showView('library');
+    renderLibrary();
+    // give MediaRecorder a tick to flush the final chunk after stop()
+    setTimeout(()=>{
+      const blob = new Blob(chunksRef, { type:'audio/webm' });
+      saveAudioBlob(memo.id, blob).then(()=>{
+        const m = state.memos.find(x=>x.id===memo.id);
+        if(m){ m.hasAudio = true; saveState(); if(currentView==='library') renderLibrary(); }
+      }).catch(()=>{});
+      transcribeWithWhisper(memo.id, blob);
+    }, 150);
+  } else {
+    state.memos.push(memo);
+    saveState();
+    showView('library');
+    renderLibrary();
+  }
 });
 
 /* ============ INIT ============ */
