@@ -270,7 +270,6 @@ function renderMemoGrid(){
         <div class="memo-play" data-play-id="${m.id}" ${m.hasAudio ? '' : 'data-nodata="1"'}>${playIcon}</div>
         <div class="memo-card-actions">
           <button class="memo-icon-btn memo-drag-handle" draggable="true" title="Glisser vers une catégorie">⠿</button>
-          <button class="memo-icon-btn memo-delete" data-id="${m.id}" title="Supprimer">🗑️</button>
         </div>
       </div>
       <div class="memo-meta">${timeAgoLabel(m.createdAt)}</div>
@@ -304,12 +303,6 @@ function renderMemoGrid(){
     });
     handle.addEventListener('dragend', ()=>{
       handle.closest('.memo-card').classList.remove('dragging');
-    });
-  });
-  memoGrid.querySelectorAll('.memo-delete').forEach(btn=>{
-    btn.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      deleteMemo(btn.dataset.id);
     });
   });
   memoGrid.querySelectorAll('.memo-play').forEach(btn=>{
