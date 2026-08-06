@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Rick</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,600;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="topbar">
+    <div class="logo">RICK</div>
+    <button class="icon-btn record-shortcut" id="btnHeaderRecord" title="Nouvel enregistrement">
+      <span class="record-dot"></span>
+    </button>
+  </header>
+
+  <!-- MAIN VIEWS -->
+  <main class="views">
+
+    <!-- LIBRARY -->
+    <section class="view" id="view-library">
+      <div class="view-scroll">
+        <div class="date-line" id="todayLine">—</div>
+        <h1 class="greeting">Bonjour, <em>Cédric</em></h1>
+
+        <div class="searchbar">
+          <span class="search-icon">⌕</span>
+          <input type="text" id="librarySearch" placeholder="Rechercher un enregistrement…">
+        </div>
+
+        <div class="section-head">
+          <span class="section-label">Catégories</span>
+          <button class="pill pill-gold" id="btnSort">✨ Trier (<span id="sortCount">0</span>)</button>
+        </div>
+
+        <div class="cat-row" id="catRow"></div>
+
+        <div class="section-head">
+          <span class="section-label">Récents <span id="recentCount">0</span></span>
+        </div>
+
+        <div class="memo-grid" id="memoGrid"></div>
+        <div class="empty-state" id="libraryEmpty" hidden>
+          <div class="empty-icon">🎙️</div>
+          <div class="empty-title">Aucun mémo</div>
+          <div class="empty-caption">Appuyez sur le micro pour enregistrer votre premier mémo.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AGENDA -->
+    <section class="view" id="view-agenda">
+      <div class="view-scroll">
+        <div class="agenda-title" id="agendaTitle">Aujourd'hui</div>
+        <div class="agenda-sub" id="agendaSub">Rien de prévu aujourd'hui</div>
+
+        <div class="calendar" id="calendar"></div>
+
+        <div id="agendaListWrap">
+          <div class="empty-state" id="agendaEmpty">
+            <div class="empty-icon">🗓️</div>
+            <div class="empty-title">Rien de prévu</div>
+            <div class="empty-caption">Dictez un mémo : Rick en tire les actions et les pose ici à la bonne date.</div>
+          </div>
+          <div class="agenda-list" id="agendaList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STORE -->
+    <section class="view" id="view-store">
+      <div class="view-scroll">
+        <div class="store-title">Extensions</div>
+        <div class="searchbar">
+          <span class="search-icon">⌕</span>
+          <input type="text" id="storeSearch" placeholder="Rechercher une extension…">
+        </div>
+
+        <div class="chip-row" id="storeFilters"></div>
+
+        <div class="section-head">
+          <span class="section-label">Installées <span id="installedCount">0</span></span>
+        </div>
+        <div class="ext-grid" id="installedGrid"></div>
+
+        <div class="section-head">
+          <span class="section-label">Découvrir <span id="discoverCount">0</span></span>
+        </div>
+        <div class="ext-grid" id="discoverGrid"></div>
+      </div>
+    </section>
+
+    <!-- MAP -->
+    <section class="view" id="view-map">
+      <div id="mapEl"></div>
+      <button class="map-fab map-fab-locate" id="btnLocate" title="Me localiser">◎</button>
+      <button class="map-fab map-fab-add" id="btnAddReminder" title="Ajouter un rappel de lieu">🔔</button>
+
+      <div class="map-sheet" id="mapSheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-row" id="mapSheetToggle">
+          <div>
+            <div class="sheet-title">Rappels de lieu</div>
+            <div class="sheet-sub" id="reminderSub">Aucun lieu enregistré</div>
+          </div>
+          <div class="sheet-actions">
+            <span class="shield">🛡️</span>
+            <span class="chevron" id="sheetChevron">⌃</span>
+          </div>
+        </div>
+        <div class="reminder-list" id="reminderList" hidden></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottombar">
+    <button class="navpill" data-view="library">
+      <span class="nav-icon">☰</span><span>Library</span>
+    </button>
+    <button class="navpill" data-view="agenda">
+      <span class="nav-icon">▤</span><span>Agenda</span>
+    </button>
+    <button class="navpill" data-view="store">
+      <span class="nav-icon">⬡</span><span>Store</span>
+    </button>
+    <button class="navpill" data-view="map">
+      <span class="nav-icon">▧</span><span>Map</span>
+    </button>
+    <button class="mic-fab" id="btnMic" title="Enregistrer">
+      <span class="mic-icon">●</span>
+    </button>
+  </nav>
+
+  <!-- RECORDING OVERLAY -->
+  <div class="overlay" id="recordOverlay" hidden>
+    <div class="record-sheet">
+      <div class="sheet-handle"></div>
+      <div class="record-pill">
+        <span class="rec-dot"></span>
+        <span id="recStatusLabel">ENREGISTREMENT</span>
+      </div>
+      <div class="record-timer" id="recTimer">00:00</div>
+
+      <div class="waveform" id="waveform">
+        <div class="wave-bars" id="waveBars"></div>
+      </div>
+
+      <div class="transcript-box">
+        <p id="transcriptText" class="transcript-placeholder">Parlez… la transcription s'affiche ici</p>
+      </div>
+
+      <div class="record-controls">
+        <div class="rec-btn-col">
+          <button class="round-btn round-btn-light" id="btnCancel">🗑️</button>
+          <span>Annuler</span>
+        </div>
+        <div class="rec-btn-col">
+          <button class="round-btn round-btn-stop" id="btnFinish"><span class="stop-square"></span></button>
+          <span>Terminer</span>
+        </div>
+        <div class="rec-btn-col">
+          <button class="round-btn round-btn-light" id="btnPause">⏸</button>
+          <span id="pauseLabel">Pause</span>
+        </div>
+      </div>
+
+      <div class="record-footnote">Le mémo rejoint votre bibliothèque à la fin</div>
+    </div>
+  </div>
+
+  <!-- MEMO DETAIL OVERLAY -->
+  <div class="overlay" id="detailOverlay" hidden>
+    <div class="record-sheet detail-sheet">
+      <div class="sheet-handle" id="detailClose"></div>
+      <div class="detail-header">
+        <span class="detail-date" id="detailDate"></span>
+        <span class="cat-badge" id="detailCatBadge"></span>
+      </div>
+      <h2 class="detail-title" id="detailTitle"></h2>
+      <div class="detail-status" id="detailStatus"></div>
+      <div class="detail-block" id="detailSummaryBlock" hidden>
+        <div class="detail-label">Résumé</div>
+        <p id="detailSummary"></p>
+      </div>
+      <div class="detail-block" id="detailActionsBlock" hidden>
+        <div class="detail-label">Actions suggérées</div>
+        <div class="action-chips" id="detailActions"></div>
+      </div>
+      <div class="detail-block">
+        <div class="detail-label">Transcription</div>
+        <p id="detailTranscript" class="detail-transcript"></p>
+      </div>
+      <button class="pill pill-gold detail-analyze" id="btnAnalyze">✨ Lancer l'analyse IA</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
