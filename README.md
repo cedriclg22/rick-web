@@ -3,7 +3,9 @@
 Réplique web fonctionnelle de l'app mobile Rick : recorder vocal, agenda, extensions, carte.
 
 ## Live
-https://cedriclg22.github.io/rick-web/
+https://rick-web-seven.vercel.app (Vercel, hébergement principal)
+
+Miroir : https://cedriclg22.github.io/rick-web/ (GitHub Pages — peut être en retard si GitHub Actions est indisponible)
 
 ## Fichiers
 | Fichier | Rôle |

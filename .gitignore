@@ -1,3 +1,4 @@
 whisper-server/.venv/
 __pycache__/
 *.pyc
+.vercel
