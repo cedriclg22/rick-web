@@ -162,10 +162,13 @@ body{
   font-family:'Inter',sans-serif;
 }
 .pill-gold{
-  background:linear-gradient(180deg,var(--gold),var(--gold-deep));
+  background:#ffffff;
   color:#2a1c02;
-  box-shadow:0 4px 12px rgba(169,124,28,.35);
+  border:1px solid var(--line);
+  box-shadow:0 2px 8px rgba(0,0,0,.08);
 }
+.pill-gold:hover{background:#fbf6ec;}
+.pill-gold:active{transform:scale(.97);}
 
 /* category cards */
 .cat-row{
@@ -213,7 +216,7 @@ body{
 .cat-delete:hover{color:var(--red);}
 
 .cat-card-add{
-  flex:0 0 130px;height:150px;border-radius:var(--radius-lg);
+  flex:0 0 74px;height:150px;border-radius:var(--radius-lg);
   border:2px dashed var(--line);background:none;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
   color:var(--ink-faint);cursor:pointer;
