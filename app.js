@@ -1,10 +1,19 @@
 /* ============ STATE ============ */
 const STORE_KEY = 'rick_state_v1';
 
-const CATS = [
+const DEFAULT_CATS = [
   { id:'pro',     name:'Pro',     icon:'💼', deco:'💼' },
   { id:'perso',   name:'Perso',   icon:'🧘', deco:'🧘' },
   { id:'famille', name:'Famille', icon:'❤️', deco:'❤️' },
+];
+
+const CUSTOM_CAT_PALETTE = [
+  { bg:'#d8e8d0', ink:'#3f6b2c' },
+  { bg:'#e0d6f2', ink:'#5b3c96' },
+  { bg:'#f9dcc4', ink:'#a85b1e' },
+  { bg:'#cfe8ec', ink:'#1d6b78' },
+  { bg:'#f6d3e0', ink:'#a13d68' },
+  { bg:'#e6e0c8', ink:'#7a6a1f' },
 ];
 
 const EXT_CATALOG = [
@@ -32,11 +41,21 @@ function loadState(){
     memos: [],
     reminders: [],
     extensions: JSON.parse(JSON.stringify(EXT_CATALOG)),
+    categories: JSON.parse(JSON.stringify(DEFAULT_CATS)),
     activeCat: null,
   };
 }
 let state = loadState();
 if(!state.extensions) state.extensions = JSON.parse(JSON.stringify(EXT_CATALOG));
+if(!state.categories) state.categories = JSON.parse(JSON.stringify(DEFAULT_CATS));
+
+function catColorStyle(c){
+  return c && c.color ? `style="background:${c.color.bg};color:${c.color.ink}"` : '';
+}
+function nextCustomColor(){
+  const n = state.categories.filter(c=>c.custom).length;
+  return CUSTOM_CAT_PALETTE[n % CUSTOM_CAT_PALETTE.length];
+}
 
 function saveState(){
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
@@ -132,10 +151,14 @@ const libraryEmpty = document.getElementById('libraryEmpty');
 const librarySearch = document.getElementById('librarySearch');
 
 function renderCatRow(){
-  catRow.innerHTML = CATS.map(c=>{
+  catRow.innerHTML = state.categories.map(c=>{
     const count = state.memos.filter(m=>m.category===c.id).length;
     const sel = state.activeCat===c.id ? 'selected':'';
-    return `<div class="cat-card ${sel}" data-cat="${c.id}">
+    return `<div class="cat-card ${sel}" data-cat="${c.id}" ${catColorStyle(c)}>
+      <div class="cat-card-actions">
+        <button class="cat-icon-btn cat-edit" data-id="${c.id}" title="Modifier">✎</button>
+        <button class="cat-icon-btn cat-delete" data-id="${c.id}" title="Supprimer">🗑</button>
+      </div>
       <div class="cat-icon-wrap">${c.icon}</div>
       <div>
         <div class="cat-name">${c.name}</div>
@@ -143,8 +166,12 @@ function renderCatRow(){
       </div>
       <div class="cat-deco">${c.deco}</div>
     </div>`;
-  }).join('');
-  catRow.querySelectorAll('.cat-card').forEach(el=>{
+  }).join('') + `<div class="cat-card cat-card-add" id="catAdd" title="Ajouter une catégorie">
+      <div class="cat-add-icon">+</div>
+      <div class="cat-add-label">Nouvelle</div>
+    </div>`;
+
+  catRow.querySelectorAll('.cat-card[data-cat]').forEach(el=>{
     el.addEventListener('click', ()=>{
       const id = el.dataset.cat;
       state.activeCat = state.activeCat === id ? null : id;
@@ -164,6 +191,52 @@ function renderCatRow(){
       if(memoId) assignMemoCategory(memoId, el.dataset.cat);
     });
   });
+  catRow.querySelectorAll('.cat-edit').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); editCategory(btn.dataset.id); });
+  });
+  catRow.querySelectorAll('.cat-delete').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteCategory(btn.dataset.id); });
+  });
+  const addEl = document.getElementById('catAdd');
+  if(addEl) addEl.addEventListener('click', addCategory);
+}
+
+function addCategory(){
+  const name = prompt('Nom de la nouvelle catégorie :');
+  if(name === null) return;
+  const trimmed = name.trim();
+  if(!trimmed) return;
+  const icon = (prompt('Emoji pour cette catégorie (laisser vide pour 🏷️) :', '🏷️') || '🏷️').trim() || '🏷️';
+  const id = 'cat_' + Date.now();
+  state.categories.push({ id, name: trimmed, icon, deco: icon, custom: true, color: nextCustomColor() });
+  saveState();
+  renderLibrary();
+}
+
+function editCategory(id){
+  const c = state.categories.find(x=>x.id===id);
+  if(!c) return;
+  const name = prompt('Nom de la catégorie :', c.name);
+  if(name === null) return;
+  const trimmed = name.trim();
+  if(trimmed) c.name = trimmed;
+  const icon = prompt('Emoji de la catégorie :', c.icon);
+  if(icon !== null && icon.trim()){ c.icon = icon.trim(); c.deco = icon.trim(); }
+  saveState();
+  renderLibrary();
+  if(detailId && !detailOverlay.hidden) openDetail(detailId);
+}
+
+function deleteCategory(id){
+  const c = state.categories.find(x=>x.id===id);
+  if(!c) return;
+  if(!confirm(`Supprimer la catégorie « ${c.name} » ? Les mémos associés deviendront non catégorisés.`)) return;
+  state.categories = state.categories.filter(x=>x.id!==id);
+  state.memos.forEach(m=>{ if(m.category===id) m.category = null; });
+  if(state.activeCat===id) state.activeCat = null;
+  saveState();
+  renderLibrary();
+  if(detailId && !detailOverlay.hidden) openDetail(detailId);
 }
 
 function timeAgoLabel(iso){
@@ -189,7 +262,8 @@ function renderMemoGrid(){
         : m.whisperFailed
           ? `<div class="memo-status">⚠️ Whisper local injoignable — transcription micro utilisée. Touchez pour lancer l'IA</div>`
           : `<div class="memo-status">✨ Non analysé — touchez pour lancer l'IA</div>`;
-    const tag = m.category ? `<span class="cat-tag ${m.category}">${CATS.find(c=>c.id===m.category)?.name||''}</span>` : '';
+    const mCat = m.category ? state.categories.find(c=>c.id===m.category) : null;
+    const tag = mCat ? `<span class="cat-tag ${mCat.custom?'':mCat.id}" ${catColorStyle(mCat)}>${mCat.name}</span>` : '';
     const playIcon = playingId===m.id && !playerAudio.paused ? '⏸' : '▶';
     return `<div class="memo-card" data-id="${m.id}">
       <div class="memo-card-top">
@@ -338,11 +412,13 @@ function openDetail(id){
   if(!m) return;
   document.getElementById('detailDate').textContent = timeAgoLabel(m.createdAt);
   const badge = document.getElementById('detailCatBadge');
-  if(m.category){
+  const dCat = m.category ? state.categories.find(c=>c.id===m.category) : null;
+  if(dCat){
     badge.hidden = false;
-    badge.className = 'cat-badge '+m.category;
-    badge.textContent = CATS.find(c=>c.id===m.category)?.name || '';
-  } else { badge.hidden = true; badge.textContent=''; }
+    badge.className = 'cat-badge '+(dCat.custom?'':dCat.id);
+    badge.setAttribute('style', catColorStyle(dCat).replace(/^style="|"$/g,''));
+    badge.textContent = dCat.name;
+  } else { badge.hidden = true; badge.textContent=''; badge.removeAttribute('style'); }
   document.getElementById('detailTitle').textContent = m.title;
   document.getElementById('detailStatus').textContent = m.transcribing
     ? '⏳ Transcription en cours (Whisper local)…'
