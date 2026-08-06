@@ -143,6 +143,18 @@ function renderCatRow(){
       saveState();
       renderLibrary();
     });
+    el.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drag-over');
+    });
+    el.addEventListener('dragleave', ()=>{ el.classList.remove('drag-over'); });
+    el.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const memoId = e.dataTransfer.getData('text/plain');
+      if(memoId) assignMemoCategory(memoId, el.dataset.cat);
+    });
   });
 }
 
@@ -171,7 +183,7 @@ function renderMemoGrid(){
           : `<div class="memo-status">✨ Non analysé — touchez pour lancer l'IA</div>`;
     const tag = m.category ? `<span class="cat-tag ${m.category}">${CATS.find(c=>c.id===m.category)?.name||''}</span>` : '';
     const playIcon = playingId===m.id && !playerAudio.paused ? '⏸' : '▶';
-    return `<div class="memo-card" data-id="${m.id}">
+    return `<div class="memo-card" data-id="${m.id}" draggable="true">
       <div class="memo-play" data-play-id="${m.id}" ${m.hasAudio ? '' : 'data-nodata="1"'}>${playIcon}</div>
       <div class="memo-meta">${timeAgoLabel(m.createdAt)}</div>
       <div class="memo-title">${escapeHtml(m.title)}</div>
@@ -193,6 +205,12 @@ function renderMemoGrid(){
 
   memoGrid.querySelectorAll('.memo-card').forEach(el=>{
     el.addEventListener('click', ()=> openDetail(el.dataset.id));
+    el.addEventListener('dragstart', (e)=>{
+      e.dataTransfer.setData('text/plain', el.dataset.id);
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); });
   });
   memoGrid.querySelectorAll('.memo-play').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
@@ -262,21 +280,13 @@ function analyzeMemo(id){
   saveState();
 }
 
-function renderCatPicker(m){
-  const picker = document.getElementById('catPicker');
-  picker.innerHTML = CATS.map(c=>
-    `<button class="cat-chip ${m.category===c.id ? 'active '+c.id : ''}" data-cat="${c.id}">${c.icon} ${c.name}</button>`
-  ).join('');
-  picker.querySelectorAll('.cat-chip').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const mm = state.memos.find(x=>x.id===detailId);
-      if(!mm) return;
-      mm.category = mm.category === btn.dataset.cat ? null : btn.dataset.cat;
-      saveState();
-      openDetail(detailId);
-      renderLibrary();
-    });
-  });
+function assignMemoCategory(memoId, catId){
+  const m = state.memos.find(x=>x.id===memoId);
+  if(!m) return;
+  m.category = m.category === catId ? null : catId;
+  saveState();
+  renderLibrary();
+  if(detailId===memoId && !detailOverlay.hidden) openDetail(memoId);
 }
 
 /* ============ DETAIL SHEET ============ */
@@ -315,8 +325,6 @@ function openDetail(id){
   } else {
     sumBlock.hidden = true; actBlock.hidden = true;
   }
-
-  renderCatPicker(m);
 
   const playBtn = document.getElementById('btnDetailPlay');
   playBtn.dataset.playId = m.id;
