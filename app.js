@@ -701,7 +701,7 @@ let audioCtx = null, analyser = null, meterRAF = null;
 let mediaRecorder = null, recordedChunks = [], recordedMimeType = '';
 let recStartTime = null, recElapsed = 0, timerInterval = null, isPaused = false;
 let finalTranscript = '';
-let includeTabAudio = true;
+let includeTabAudio = false;
 let whisperAvailable = null; // cached health check result
 
 // build wave bars
@@ -770,10 +770,6 @@ function openRecordOverlay(){
   document.getElementById('recStatusLabel').textContent = 'ENREGISTREMENT';
   document.getElementById('pauseLabel').textContent = 'Pause';
   btnTabAudio.disabled = false;
-  btnTabAudio.classList.toggle('active', includeTabAudio);
-  document.getElementById('tabAudioLabel').textContent = includeTabAudio
-    ? "Visio incluse — le partage sera demandé au démarrage"
-    : "Inclure le son d'un onglet (visio)";
   startRecording();
 }
 
@@ -999,6 +995,9 @@ document.getElementById('btnFinish').addEventListener('click', ()=>{
   };
 
   recordOverlay.hidden = true;
+  includeTabAudio = false;
+  btnTabAudio.classList.remove('active');
+  document.getElementById('tabAudioLabel').textContent = "Inclure le son d'un onglet (visio)";
 
   stopRecorderAndGetBlob().then(blob=>{
     if(blob && blob.size>0){
