@@ -922,7 +922,9 @@ function stopRecorderAndGetBlob(){
 }
 
 document.getElementById('btnMic').addEventListener('click', openRecordOverlay);
-document.getElementById('btnHeaderRecord').addEventListener('click', openRecordOverlay);
+document.getElementById('btnBluetooth').addEventListener('click', ()=>{
+  alert('Connexion Bluetooth à votre Rick — bientôt disponible.');
+});
 
 document.getElementById('btnCancel').addEventListener('click', ()=>{
   closeRecordOverlay();
@@ -1017,6 +1019,28 @@ document.getElementById('btnFinish').addEventListener('click', ()=>{
     }
   });
 });
+
+/* ============ LOGIN GATE ============ */
+const LOGIN_KEY = 'rick_user_email';
+const loginOverlay = document.getElementById('loginOverlay');
+const loginEmail = document.getElementById('loginEmail');
+
+function tryLogin(){
+  const savedEmail = localStorage.getItem(LOGIN_KEY);
+  if(savedEmail){ loginOverlay.hidden = true; return true; }
+  loginOverlay.hidden = false;
+  return false;
+}
+
+document.getElementById('loginForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const value = loginEmail.value.trim();
+  if(!value.includes('@')) return;
+  localStorage.setItem(LOGIN_KEY, value);
+  loginOverlay.hidden = true;
+});
+
+tryLogin();
 
 /* ============ INIT ============ */
 showView('library');

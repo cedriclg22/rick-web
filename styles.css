@@ -86,6 +86,13 @@ body{
   color:var(--ink);
   transform:skewX(-6deg);
 }
+.logo-img{
+  height:26px;width:auto;display:block;
+  filter:invert(1);
+}
+@media (prefers-color-scheme: dark){
+  .logo-img{filter:none;}
+}
 .icon-btn{
   width:44px;height:44px;border-radius:50%;
   border:1px solid var(--line);
@@ -94,7 +101,7 @@ body{
   box-shadow:var(--shadow-sm);
   cursor:pointer;
 }
-.record-dot{width:10px;height:10px;border-radius:50%;background:var(--red);}
+.bluetooth-icon{color:var(--ink-soft);}
 
 /* ---------- VIEWS ---------- */
 .views{flex:1;min-height:0;position:relative;}
@@ -183,7 +190,7 @@ body{
   position:relative;
   overflow:hidden;
   cursor:pointer;
-  display:flex;flex-direction:column;justify-content:space-between;
+  display:flex;flex-direction:column;justify-content:flex-end;
   border:2px solid transparent;
   transition:transform .15s ease;
 }
@@ -394,11 +401,10 @@ body{
 }
 .navpill{
   display:flex;flex-direction:column;align-items:center;gap:2px;
-  border:none;background:var(--bg-card);
+  border:none;background:none;
   border-radius:999px;
   padding:10px 14px;
   font-size:10px;font-weight:700;color:var(--ink-faint);
-  box-shadow:var(--shadow-md);
   cursor:pointer;
 }
 .nav-icon{font-size:16px;}
@@ -471,6 +477,28 @@ body{
 }
 .stop-square{width:22px;height:22px;background:#fff;border-radius:4px;display:block;}
 .record-footnote{font-size:12px;color:var(--ink-faint);text-align:center;}
+
+/* ---------- LOGIN GATE ---------- */
+.login-overlay{align-items:center;justify-content:center;background:var(--bg);z-index:1000;}
+.login-sheet{
+  width:calc(100% - 40px);max-width:360px;border-radius:24px;
+  padding:36px 28px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+}
+.login-logo{
+  font-family:'Playfair Display',serif;font-style:italic;font-weight:800;
+  font-size:34px;color:var(--ink);transform:skewX(-6deg);
+}
+.login-sub{font-size:14px;color:var(--ink-soft);margin:0;}
+#loginForm{width:100%;display:flex;flex-direction:column;gap:12px;margin-top:6px;}
+.login-input{
+  width:100%;border:1px solid var(--line);border-radius:14px;
+  padding:13px 16px;font-size:15px;font-family:'Inter',sans-serif;
+  background:var(--bg-card);color:var(--ink);
+}
+.login-input:focus{outline:none;border-color:var(--gold-deep);}
+.login-submit{width:100%;padding:13px;font-size:14px;}
+.login-note{font-size:11px;color:var(--ink-faint);margin:0;line-height:1.4;}
 
 /* ---------- DETAIL SHEET ---------- */
 .detail-sheet{align-items:stretch;}
