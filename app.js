@@ -580,7 +580,7 @@ let recognizer = null;
 let mediaStream = null;       // mic stream
 let displayStream = null;     // tab/screen audio stream (visio)
 let audioCtx = null, analyser = null, meterRAF = null;
-let mediaRecorder = null, recordedChunks = [];
+let mediaRecorder = null, recordedChunks = [], recordedMimeType = '';
 let recStartTime = null, recElapsed = 0, timerInterval = null, isPaused = false;
 let finalTranscript = '';
 let includeTabAudio = false;
@@ -588,6 +588,27 @@ let whisperAvailable = null; // cached health check result
 
 // build wave bars
 for(let i=0;i<40;i++){ const s=document.createElement('span'); s.style.height='6px'; waveBars.appendChild(s); }
+
+function pickRecorderMimeType(){
+  if(!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/ogg;codecs=opus',
+  ];
+  for(const type of candidates){
+    if(MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return '';
+}
+function extForMimeType(type){
+  if(!type) return 'webm';
+  if(type.includes('mp4')) return 'mp4';
+  if(type.includes('ogg')) return 'ogg';
+  return 'webm';
+}
 
 // transcript is always editable — lets users type/correct when live recognition
 // is unavailable (e.g. Safari has no Web Speech support) or wrong
@@ -622,6 +643,7 @@ function openRecordOverlay(){
   recordOverlay.hidden = false;
   finalTranscript = '';
   recordedChunks = [];
+  recordedMimeType = '';
   transcriptText.textContent = '';
   transcriptText.className = 'transcript-placeholder';
   transcriptText.textContent = 'Parlez… la transcription s\'affiche ici';
@@ -694,7 +716,11 @@ function startRecording(){
     }
 
     try{
-      mediaRecorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+      recordedMimeType = pickRecorderMimeType();
+      mediaRecorder = recordedMimeType
+        ? new MediaRecorder(dest.stream, { mimeType: recordedMimeType })
+        : new MediaRecorder(dest.stream); // let the browser pick (e.g. Safari has no webm support)
+      recordedMimeType = mediaRecorder.mimeType || recordedMimeType;
       mediaRecorder.ondataavailable = (e)=>{ if(e.data && e.data.size>0) recordedChunks.push(e.data); };
       mediaRecorder.start();
     }catch(e){ mediaRecorder = null; }
@@ -765,9 +791,9 @@ document.getElementById('btnPause').addEventListener('click', (e)=>{
   }
 });
 
-function transcribeWithWhisper(memoId, blob){
+function transcribeWithWhisper(memoId, blob, ext){
   const form = new FormData();
-  form.append('audio', blob, 'memo.webm');
+  form.append('audio', blob, 'memo.' + (ext || 'webm'));
   return fetch(WHISPER_URL + '/transcribe', { method:'POST', body: form })
     .then(r=>{ if(!r.ok) throw new Error('server error'); return r.json(); })
     .then(data=>{
@@ -799,6 +825,8 @@ document.getElementById('btnFinish').addEventListener('click', ()=>{
   const usedMix = includeTabAudio && displayStream;
   const chunksRef = recordedChunks;
   const hadRecorder = !!mediaRecorder;
+  const mimeType = recordedMimeType || 'audio/webm';
+  const ext = extForMimeType(mimeType);
   stopRecording();
 
   const memo = {
@@ -830,12 +858,12 @@ document.getElementById('btnFinish').addEventListener('click', ()=>{
     renderLibrary();
     // give MediaRecorder a tick to flush the final chunk after stop()
     setTimeout(()=>{
-      const blob = new Blob(chunksRef, { type:'audio/webm' });
+      const blob = new Blob(chunksRef, { type: mimeType });
       saveAudioBlob(memo.id, blob).then(()=>{
         const m = state.memos.find(x=>x.id===memo.id);
         if(m){ m.hasAudio = true; saveState(); if(currentView==='library') renderLibrary(); }
       }).catch(()=>{});
-      transcribeWithWhisper(memo.id, blob);
+      transcribeWithWhisper(memo.id, blob, ext);
     }, 150);
   } else {
     state.memos.push(memo);
