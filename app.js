@@ -69,6 +69,14 @@ function getAudioBlob(id){
     req.onerror = ()=>reject(req.error);
   }));
 }
+function deleteAudioBlob(id){
+  return openAudioDB().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(AUDIO_STORE, 'readwrite');
+    tx.objectStore(AUDIO_STORE).delete(id);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  }));
+}
 
 /* ============ PLAYBACK ============ */
 const playerAudio = new Audio();
@@ -183,8 +191,14 @@ function renderMemoGrid(){
           : `<div class="memo-status">✨ Non analysé — touchez pour lancer l'IA</div>`;
     const tag = m.category ? `<span class="cat-tag ${m.category}">${CATS.find(c=>c.id===m.category)?.name||''}</span>` : '';
     const playIcon = playingId===m.id && !playerAudio.paused ? '⏸' : '▶';
-    return `<div class="memo-card" data-id="${m.id}" draggable="true">
-      <div class="memo-play" data-play-id="${m.id}" ${m.hasAudio ? '' : 'data-nodata="1"'}>${playIcon}</div>
+    return `<div class="memo-card" data-id="${m.id}">
+      <div class="memo-card-top">
+        <div class="memo-play" data-play-id="${m.id}" ${m.hasAudio ? '' : 'data-nodata="1"'}>${playIcon}</div>
+        <div class="memo-card-actions">
+          <button class="memo-icon-btn memo-drag-handle" draggable="true" title="Glisser vers une catégorie">⠿</button>
+          <button class="memo-icon-btn memo-delete" data-id="${m.id}" title="Supprimer">🗑️</button>
+        </div>
+      </div>
       <div class="memo-meta">${timeAgoLabel(m.createdAt)}</div>
       <div class="memo-title">${escapeHtml(m.title)}</div>
       ${statusHtml}
@@ -205,12 +219,24 @@ function renderMemoGrid(){
 
   memoGrid.querySelectorAll('.memo-card').forEach(el=>{
     el.addEventListener('click', ()=> openDetail(el.dataset.id));
-    el.addEventListener('dragstart', (e)=>{
-      e.dataTransfer.setData('text/plain', el.dataset.id);
+  });
+  memoGrid.querySelectorAll('.memo-drag-handle').forEach(handle=>{
+    handle.addEventListener('click', (e)=> e.stopPropagation());
+    handle.addEventListener('dragstart', (e)=>{
+      const card = handle.closest('.memo-card');
+      e.dataTransfer.setData('text/plain', card.dataset.id);
       e.dataTransfer.effectAllowed = 'move';
-      el.classList.add('dragging');
+      card.classList.add('dragging');
     });
-    el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); });
+    handle.addEventListener('dragend', ()=>{
+      handle.closest('.memo-card').classList.remove('dragging');
+    });
+  });
+  memoGrid.querySelectorAll('.memo-delete').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      deleteMemo(btn.dataset.id);
+    });
   });
   memoGrid.querySelectorAll('.memo-play').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
@@ -289,6 +315,19 @@ function assignMemoCategory(memoId, catId){
   if(detailId===memoId && !detailOverlay.hidden) openDetail(memoId);
 }
 
+function deleteMemo(id){
+  const m = state.memos.find(x=>x.id===id);
+  if(!m) return;
+  if(!confirm(`Supprimer « ${m.title} » ? Cette action est irréversible.`)) return;
+  if(playingId===id){ playerAudio.pause(); playingId=null; }
+  state.memos = state.memos.filter(x=>x.id!==id);
+  saveState();
+  deleteAudioBlob(id).catch(()=>{});
+  if(detailId===id) detailOverlay.hidden = true;
+  renderLibrary();
+  if(currentView==='agenda') renderAgenda();
+}
+
 /* ============ DETAIL SHEET ============ */
 const detailOverlay = document.getElementById('detailOverlay');
 let detailId = null;
@@ -338,6 +377,9 @@ function openDetail(id){
 }
 document.getElementById('detailClose').addEventListener('click', ()=> detailOverlay.hidden = true);
 detailOverlay.addEventListener('click', (e)=>{ if(e.target===detailOverlay) detailOverlay.hidden = true; });
+document.getElementById('btnDetailDelete').addEventListener('click', ()=>{
+  if(detailId) deleteMemo(detailId);
+});
 
 document.getElementById('btnDetailPlay').addEventListener('click', ()=>{
   const m = state.memos.find(x=>x.id===detailId);

@@ -214,6 +214,17 @@ body{
   cursor:pointer;
   display:flex;flex-direction:column;gap:12px;
 }
+.memo-card-top{display:flex;align-items:flex-start;justify-content:space-between;}
+.memo-card-actions{display:flex;gap:6px;}
+.memo-icon-btn{
+  width:30px;height:30px;border-radius:50%;
+  background:var(--bg);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;cursor:pointer;color:var(--ink-soft);
+}
+.memo-drag-handle{cursor:grab;letter-spacing:-2px;}
+.memo-drag-handle:active{cursor:grabbing;}
+.memo-delete:hover{background:#fbdcd8;color:var(--red);border-color:transparent;}
 .memo-play{
   width:38px;height:38px;border-radius:50%;
   background:var(--bg);border:1px solid var(--line);
@@ -437,6 +448,7 @@ body{
 /* ---------- DETAIL SHEET ---------- */
 .detail-sheet{align-items:stretch;}
 .detail-header{display:flex;justify-content:space-between;align-items:center;margin:6px 0 10px;}
+.detail-header-actions{display:flex;align-items:center;gap:10px;}
 .detail-date{font-size:12px;font-weight:700;color:var(--ink-faint);}
 .cat-badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:999px;}
 .cat-badge.pro{background:var(--pro);color:var(--pro-ink);}
@@ -464,9 +476,8 @@ body{
 
 .memo-play[data-nodata="1"]{opacity:.35;}
 
-/* drag & drop: move a memo card onto a category card */
-.memo-card{cursor:grab;}
-.memo-card.dragging{opacity:.4;cursor:grabbing;}
+/* drag & drop: drag the handle icon onto a category card */
+.memo-card.dragging{opacity:.4;}
 .cat-card{transition:transform .12s ease, box-shadow .12s ease;}
 .cat-card.drag-over{
   transform:scale(1.03);
