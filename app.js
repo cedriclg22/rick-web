@@ -760,14 +760,47 @@ function startRecording(){
   }
 }
 
+function releaseMediaResources(){
+  if(mediaRecorder && mediaRecorder.state !== 'inactive'){ try{ mediaRecorder.stop(); }catch(e){} }
+  mediaRecorder = null;
+  if(audioCtx){ try{ audioCtx.close(); }catch(e){} audioCtx=null; }
+  if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+  if(displayStream){ displayStream.getTracks().forEach(t=>t.stop()); displayStream=null; }
+}
+
 function stopRecording(){
   clearInterval(timerInterval);
   if(recognizer){ try{ recognizer.onend=null; recognizer.stop(); }catch(e){} recognizer=null; }
   if(meterRAF) cancelAnimationFrame(meterRAF);
-  if(mediaRecorder && mediaRecorder.state !== 'inactive'){ try{ mediaRecorder.stop(); }catch(e){} }
-  if(audioCtx){ try{ audioCtx.close(); }catch(e){} audioCtx=null; }
-  if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
-  if(displayStream){ displayStream.getTracks().forEach(t=>t.stop()); displayStream=null; }
+  releaseMediaResources();
+}
+
+// Stops the recorder and waits for its real 'stop' event (with the final
+// chunk flushed) before tearing down the audio graph — a fixed setTimeout
+// guess was racing MediaRecorder's own flush on some browsers (e.g. Brave),
+// silently dropping the last chunk and leaving the memo with no audio.
+function stopRecorderAndGetBlob(){
+  clearInterval(timerInterval);
+  if(recognizer){ try{ recognizer.onend=null; recognizer.stop(); }catch(e){} recognizer=null; }
+  if(meterRAF) cancelAnimationFrame(meterRAF);
+
+  const rec = mediaRecorder;
+  const chunks = recordedChunks;
+  const type = recordedMimeType || 'audio/webm';
+
+  if(!rec || rec.state === 'inactive'){
+    releaseMediaResources();
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve)=>{
+    const finish = ()=>{
+      releaseMediaResources();
+      resolve(chunks.length ? new Blob(chunks, { type }) : null);
+    };
+    rec.addEventListener('stop', finish, { once:true });
+    try{ rec.stop(); }catch(e){ finish(); }
+  });
 }
 
 document.getElementById('btnMic').addEventListener('click', openRecordOverlay);
@@ -823,11 +856,7 @@ function transcribeWithWhisper(memoId, blob, ext){
 document.getElementById('btnFinish').addEventListener('click', ()=>{
   const liveTranscript = transcriptText.classList.contains('transcript-placeholder') ? '' : transcriptText.textContent.trim();
   const usedMix = includeTabAudio && displayStream;
-  const chunksRef = recordedChunks;
-  const hadRecorder = !!mediaRecorder;
-  const mimeType = recordedMimeType || 'audio/webm';
-  const ext = extForMimeType(mimeType);
-  stopRecording();
+  const ext = extForMimeType(recordedMimeType || 'audio/webm');
 
   const memo = {
     id: 'm'+Date.now(),
@@ -850,27 +879,25 @@ document.getElementById('btnFinish').addEventListener('click', ()=>{
   btnTabAudio.classList.remove('active');
   document.getElementById('tabAudioLabel').textContent = "Inclure le son d'un onglet (visio)";
 
-  if(hadRecorder && chunksRef.length){
-    memo.transcribing = true;
-    state.memos.push(memo);
-    saveState();
-    showView('library');
-    renderLibrary();
-    // give MediaRecorder a tick to flush the final chunk after stop()
-    setTimeout(()=>{
-      const blob = new Blob(chunksRef, { type: mimeType });
+  stopRecorderAndGetBlob().then(blob=>{
+    if(blob && blob.size>0){
+      memo.transcribing = true;
+      state.memos.push(memo);
+      saveState();
+      showView('library');
+      renderLibrary();
       saveAudioBlob(memo.id, blob).then(()=>{
         const m = state.memos.find(x=>x.id===memo.id);
         if(m){ m.hasAudio = true; saveState(); if(currentView==='library') renderLibrary(); }
       }).catch(()=>{});
       transcribeWithWhisper(memo.id, blob, ext);
-    }, 150);
-  } else {
-    state.memos.push(memo);
-    saveState();
-    showView('library');
-    renderLibrary();
-  }
+    } else {
+      state.memos.push(memo);
+      saveState();
+      showView('library');
+      renderLibrary();
+    }
+  });
 });
 
 /* ============ INIT ============ */
