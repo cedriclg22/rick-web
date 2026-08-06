@@ -159,7 +159,6 @@ function renderCatRow(){
         <button class="cat-icon-btn cat-edit" data-id="${c.id}" title="Modifier">✎</button>
         <button class="cat-icon-btn cat-delete" data-id="${c.id}" title="Supprimer">🗑</button>
       </div>
-      <div class="cat-icon-wrap">${c.icon}</div>
       <div>
         <div class="cat-name">${c.name}</div>
         <div class="cat-count">${count} mémo${count>1?'s':''}</div>
