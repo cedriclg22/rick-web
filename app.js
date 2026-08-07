@@ -156,8 +156,8 @@ function renderCatRow(){
     const sel = state.activeCat===c.id ? 'selected':'';
     return `<div class="cat-card ${sel}" data-cat="${c.id}" ${catColorStyle(c)}>
       <div class="cat-card-actions">
-        <button class="cat-icon-btn cat-edit" data-id="${c.id}" title="Modifier">✎</button>
-        <button class="cat-icon-btn cat-delete" data-id="${c.id}" title="Supprimer">🗑</button>
+        <button class="cat-icon-btn cat-edit" data-id="${c.id}" title="Modifier"><span class="mask-icon icon-edit"></span></button>
+        <button class="cat-icon-btn cat-delete" data-id="${c.id}" title="Supprimer"><span class="mask-icon icon-trash"></span></button>
       </div>
       <div>
         <div class="cat-name">${c.name}</div>

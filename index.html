@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,600;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="styles.css?v=2">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -154,7 +154,7 @@
       </button>
     </div>
     <button class="mic-fab" id="btnMic" title="Enregistrer">
-      <img class="mic-icon" src="images/icon-mic.png" alt="Enregistrer">
+      <span class="mask-icon mic-icon icon-micro"></span>
     </button>
   </nav>
 
@@ -184,7 +184,7 @@
 
       <div class="record-controls">
         <div class="rec-btn-col">
-          <button class="round-btn round-btn-light" id="btnCancel">🗑️</button>
+          <button class="round-btn round-btn-light" id="btnCancel"><span class="mask-icon icon-trash"></span></button>
           <span>Annuler</span>
         </div>
         <div class="rec-btn-col">
@@ -208,7 +208,7 @@
         <span class="detail-date" id="detailDate"></span>
         <div class="detail-header-actions">
           <span class="cat-badge" id="detailCatBadge"></span>
-          <button class="memo-icon-btn memo-delete" id="btnDetailDelete" title="Supprimer ce mémo">🗑️</button>
+          <button class="memo-icon-btn memo-delete" id="btnDetailDelete" title="Supprimer ce mémo"><span class="mask-icon icon-trash"></span></button>
         </div>
       </div>
       <div class="detail-title-row">
@@ -239,6 +239,6 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
