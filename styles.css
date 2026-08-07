@@ -409,7 +409,7 @@ body{
   cursor:pointer;
 }
 .nav-icon{
-  width:19px;height:19px;display:block;
+  width:22px;height:22px;display:block;
   background-color:currentColor;
   -webkit-mask-size:contain;mask-size:contain;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
@@ -586,4 +586,7 @@ body{
   #view-map{border-radius:0;}
   .map-sheet{max-width:420px;left:24px;right:auto;bottom:24px;border-radius:20px;box-shadow:var(--shadow-lg);}
   .map-fab{right:24px;}
+
+  .nav-icon{width:28px;height:28px;}
+  .navpill{padding:14px 24px;font-size:11px;gap:4px;}
 }
