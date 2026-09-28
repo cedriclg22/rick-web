@@ -7,6 +7,11 @@ if [ ! -d ".venv" ]; then
   python3 -m venv .venv
 fi
 
+# secrets locaux (ASSEMBLYAI_API_KEY) — fichier gitignore
+if [ -f ".env" ]; then
+  set -a; source .env; set +a
+fi
+
 source .venv/bin/activate
 pip show mlx-whisper >/dev/null 2>&1 || pip install -q mlx-whisper flask flask-cors
 

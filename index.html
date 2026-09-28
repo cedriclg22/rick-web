@@ -7,34 +7,90 @@
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,600;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Cooper Hewitt (libre) : « Bonjour, prénom » -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cooper-hewitt@5.3.0/700.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cooper-hewitt@5.3.0/700-italic.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=28">
 </head>
 <body>
 
 <div class="app">
 
-  <!-- LOGIN GATE -->
-  <div class="overlay login-overlay" id="loginOverlay">
+  <!-- AUTHENTIFICATION -->
+  <div class="overlay login-overlay" id="loginOverlay" hidden>
     <div class="record-sheet login-sheet">
+      <button type="button" class="login-close" id="loginClose" aria-label="Continuer la démo" hidden>&times;</button>
       <img src="images/rick-logo.png" alt="RICK" class="login-logo-img">
-      <p class="login-sub">Connectez-vous pour accéder à vos mémos.</p>
-      <form id="loginForm">
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-auth="login">Connexion</button>
+        <button type="button" class="auth-tab" data-auth="signup">Créer un compte</button>
+      </div>
+
+      <button type="button" class="google-btn" id="googleBtn">
+        <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+        <span>Continuer avec Google</span>
+      </button>
+      <div class="auth-sep"><span>ou</span></div>
+
+      <form id="loginForm" class="auth-form">
         <input type="email" id="loginEmail" class="login-input" placeholder="votre@email.com" required autocomplete="email">
-        <button type="submit" class="pill pill-gold login-submit">Continuer</button>
+        <input type="password" id="loginPass" class="login-input" placeholder="Mot de passe" required autocomplete="current-password">
+        <button type="submit" class="pill pill-gold login-submit">Se connecter</button>
+        <p class="auth-error" id="loginError" hidden></p>
       </form>
-      <p class="login-note">Accès simplifié par e-mail pendant la bêta — aucun mot de passe requis.</p>
+
+      <form id="signupForm" class="auth-form" hidden>
+        <input type="text" id="signupName" class="login-input" placeholder="Votre prénom" autocomplete="name">
+        <input type="email" id="signupEmail" class="login-input" placeholder="votre@email.com" autocomplete="email">
+        <input type="password" id="signupPass" class="login-input" placeholder="Mot de passe (6 caractères min.)" autocomplete="new-password">
+        <div class="auth-label">Votre activité</div>
+        <select id="signupProfession" class="login-input login-select">
+          <option value="personnel">Usage personnel</option>
+          <option value="ecommerce">E-commerce</option>
+          <option value="veterinaire">Vétérinaire</option>
+          <option value="medecin">Médecin / professionnel de santé</option>
+          <option value="ehpad">EHPAD / médico-social</option>
+          <option value="immobilier">Immobilier</option>
+          <option value="banque">Banque / assurance / patrimoine</option>
+          <option value="commerce">Commerce / artisanat</option>
+          <option value="autre">Autre</option>
+        </select>
+        <div class="auth-label">Votre espace</div>
+        <div class="auth-choice" id="signupMode">
+          <button type="button" class="auth-opt active" data-mode="solo">Solo</button>
+          <button type="button" class="auth-opt" data-mode="admin">Créer une équipe</button>
+          <button type="button" class="auth-opt" data-mode="join">Rejoindre</button>
+        </div>
+        <input type="text" id="signupTeamName" class="login-input" placeholder="Nom de l'équipe" hidden>
+        <input type="text" id="signupTeamCode" class="login-input" placeholder="Code d'invitation (ex. RICK-4821)" hidden>
+        <button type="submit" class="pill pill-gold login-submit">Créer mon compte</button>
+        <p class="auth-error" id="signupError" hidden></p>
+      </form>
+
+      <p class="auth-error" id="setupError" hidden></p>
+      <p class="login-note" id="loginNote">Chaque compte a ses propres mémos, synchronisés sur tous vos appareils.</p>
     </div>
   </div>
 
   <!-- HEADER -->
   <header class="topbar">
     <img src="images/rick-logo.png" alt="RICK" class="logo-img">
+    <div class="topbar-actions">
+    <button class="pill pill-login" id="btnLogin">Se connecter</button>
+    <button class="icon-btn" id="btnAccount" title="Réglages et compte" aria-label="Réglages et compte">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3.1"/>
+        <path d="M19.4 14.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9.1a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.56 1.03z"/>
+      </svg>
+    </button>
     <button class="icon-btn" id="btnBluetooth" title="Connecter votre Rick">
       <svg class="bluetooth-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M6.5 6.5l11 11L12 22V2l5.5 5.5-11 11" />
       </svg>
     </button>
+    </div>
   </header>
 
   <!-- MAIN VIEWS -->
@@ -53,7 +109,6 @@
 
         <div class="section-head">
           <span class="section-label">Catégories</span>
-          <button class="pill pill-gold" id="btnSort">✨ Trier (<span id="sortCount">0</span>)</button>
         </div>
 
         <div class="cat-row" id="catRow"></div>
@@ -100,6 +155,7 @@
         </div>
 
         <div class="chip-row" id="storeFilters"></div>
+        <div class="chip-row chip-row-sub" id="storeProfessions" hidden></div>
 
         <div class="section-head">
           <span class="section-label">Installées <span id="installedCount">0</span></span>
@@ -110,6 +166,23 @@
           <span class="section-label">Découvrir <span id="discoverCount">0</span></span>
         </div>
         <div class="ext-grid" id="discoverGrid"></div>
+      </div>
+    </section>
+
+    <!-- DEMANDER À RICK -->
+    <section class="view" id="view-chat">
+      <div class="chat-scroll" id="chatScroll">
+        <div class="chat-intro" id="chatIntro">
+          <div class="agenda-title">Demander à Rick</div>
+          <div class="agenda-sub">Posez une question sur tous vos mémos vocaux.</div>
+          <div class="chat-suggest" id="chatSuggest">
+            <button type="button" class="chat-chip">Qu'est-ce que j'ai oublié de faire depuis la semaine dernière ?</button>
+            <button type="button" class="chat-chip">Résume mes mémos de cette semaine</button>
+            <button type="button" class="chat-chip">Quels rendez-vous ai-je évoqués ?</button>
+            <button type="button" class="chat-chip">Quelles idées ai-je eues ce mois-ci ?</button>
+          </div>
+        </div>
+        <div class="chat-list" id="chatList"></div>
       </div>
     </section>
 
@@ -146,6 +219,9 @@
       <button class="navpill" data-view="agenda">
         <span class="nav-icon icon-agenda"></span><span>Agenda</span>
       </button>
+      <button class="navpill" data-view="chat">
+        <span class="nav-icon icon-chat"></span><span>Demander</span>
+      </button>
       <button class="navpill" data-view="store">
         <span class="nav-icon icon-store"></span><span>Store</span>
       </button>
@@ -153,8 +229,28 @@
         <span class="nav-icon icon-map"></span><span>Map</span>
       </button>
     </div>
-    <button class="mic-fab" id="btnMic" title="Enregistrer">
-      <span class="mask-icon mic-icon icon-micro"></span>
+    <!-- Saisie « Demander à Rick » : au-dessus de la nav sur mobile (onglet
+         Demander), à la place de la nav sur desktop (toujours visible). -->
+    <form class="chat-bar" id="chatForm">
+      <div class="chat-attach" id="chatAttach" hidden></div>
+      <div class="chat-drop-hint" aria-hidden="true">Déposez le mémo pour interroger Rick</div>
+      <textarea id="chatInput" rows="1" placeholder="Demandez à Rick…" autocomplete="off"></textarea>
+      <button type="button" class="chat-reset" id="chatReset" title="Nouvelle conversation" hidden>↺</button>
+      <button type="submit" class="chat-send" id="chatSend" title="Envoyer" aria-label="Envoyer">↑</button>
+    </form>
+    <!-- Importer un audio : pendant gris du disque d'enregistrement (desktop) -->
+    <button class="import-fab" id="btnImport" title="Importer un fichier audio" aria-label="Importer un fichier audio">
+      <span class="mic-inner">
+        <span class="mask-icon mic-icon icon-upload"></span>
+        <span class="mic-label">Importer un audio</span>
+      </span>
+    </button>
+    <input type="file" id="importInput" accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm,.flac,.aac" hidden>
+    <button class="mic-fab" id="btnMic" title="Enregistrer un nouveau mémo" aria-label="Enregistrer un nouveau mémo">
+      <span class="mic-inner">
+        <span class="mask-icon mic-icon icon-micro"></span>
+        <span class="mic-label">Nouveau mémo</span>
+      </span>
     </button>
   </nav>
 
@@ -169,7 +265,7 @@
 
       <button class="tab-audio-toggle" id="btnTabAudio">
         <span id="tabAudioIcon">🖥️</span>
-        <span id="tabAudioLabel">Inclure le son d'un onglet (visio)</span>
+        <span id="tabAudioLabel">Au casque ? Ajouter le son de l’onglet visio</span>
       </button>
 
       <div class="record-timer" id="recTimer">00:00</div>
@@ -181,6 +277,7 @@
       <div class="transcript-box">
         <p id="transcriptText" class="transcript-placeholder">Parlez… la transcription s'affiche ici</p>
       </div>
+      <p class="stt-status" id="sttStatus" hidden></p>
 
       <div class="record-controls">
         <div class="rec-btn-col">
@@ -211,11 +308,13 @@
           <button class="memo-icon-btn memo-delete" id="btnDetailDelete" title="Supprimer ce mémo"><span class="mask-icon icon-trash"></span></button>
         </div>
       </div>
-      <div class="detail-title-row">
-        <button class="round-btn round-btn-light detail-play" id="btnDetailPlay">▶</button>
-        <h2 class="detail-title" id="detailTitle"></h2>
-      </div>
-      <div class="detail-status" id="detailStatus"></div>
+      <h2 class="detail-title" id="detailTitle"></h2>
+      <div class="detail-status" id="detailStatus" hidden></div>
+      <button type="button" class="detail-player" id="btnDetailPlay">
+        <span class="detail-player-btn" id="detailPlayIcon">▶</span>
+        <span class="detail-player-wave" aria-hidden="true"></span>
+        <span class="detail-player-time" id="detailDuration"></span>
+      </button>
       <div class="detail-block" id="detailSummaryBlock" hidden>
         <div class="detail-label">Résumé</div>
         <p id="detailSummary"></p>
@@ -226,19 +325,95 @@
       </div>
       <div class="detail-block">
         <div class="detail-label">Catégorie</div>
-        <p class="detail-cat-hint" id="detailCatHint">Glissez-déposez le mémo sur une catégorie depuis la bibliothèque pour la changer.</p>
+        <div class="detail-cats" id="detailCats"></div>
       </div>
       <div class="detail-block">
-        <div class="detail-label">Transcription <span class="edit-hint">(modifiable)</span></div>
+        <div class="detail-label">Transcription <span class="edit-hint">touchez pour modifier</span></div>
         <p id="detailTranscript" class="detail-transcript" contenteditable="true"></p>
       </div>
-      <button class="pill pill-gold detail-analyze" id="btnAnalyze">✨ Lancer l'analyse IA</button>
+      <div class="detail-cta">
+        <button class="detail-analyze" id="btnAnalyze">✨ Analyser avec l'IA</button>
+        <button class="detail-ask" id="btnDetailAsk">💬 Demander à Rick</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPTE -->
+  <div class="overlay" id="accountOverlay" hidden>
+    <div class="record-sheet account-sheet">
+      <div class="sheet-handle" id="accountClose"></div>
+      <div class="account-head">
+        <div class="account-avatar" id="accountAvatar">–</div>
+        <div>
+          <div class="account-name" id="accountName"></div>
+          <div class="account-email" id="accountEmail"></div>
+        </div>
+      </div>
+      <div class="account-rows" id="accountRows"></div>
+      <button class="pill pill-gold account-action" id="btnManageTeam" hidden>👥 Gérer l'équipe</button>
+      <button class="pill pill-ghost account-action" id="btnCreateTeam" hidden>Créer une équipe</button>
+      <button class="pill pill-ghost account-action" id="btnJoinTeam" hidden>Rejoindre une équipe</button>
+      <button class="pill pill-danger account-action" id="btnLogout">Se déconnecter</button>
+    </div>
+  </div>
+
+  <!-- APPAREILS RICK (Bluetooth) -->
+  <div class="overlay" id="deviceOverlay" hidden>
+    <div class="record-sheet device-sheet">
+      <div class="sheet-handle" id="deviceClose"></div>
+      <div class="detail-header">
+        <span class="detail-date">Vos appareils</span>
+        <span class="device-count" id="deviceCount">0 Rick</span>
+      </div>
+      <h2 class="detail-title">Rick connectés</h2>
+      <p class="detail-cat-hint">
+        Donnez un emplacement à chaque Rick (« Salle réunion 1 ») ou affectez-le à quelqu'un.
+        Chaque appareil peut ranger ses enregistrements dans sa propre catégorie.
+      </p>
+
+      <div class="device-list" id="deviceList"></div>
+
+      <button class="pill pill-gold device-add" id="btnPairDevice">+ Appairer un Rick</button>
+      <p class="login-note" id="deviceNote"></p>
+    </div>
+  </div>
+
+  <!-- ÉQUIPE (admin) -->
+  <div class="overlay" id="teamOverlay" hidden>
+    <div class="record-sheet team-sheet">
+      <div class="sheet-handle" id="teamClose"></div>
+      <div class="detail-header">
+        <span class="detail-date">Équipe</span>
+        <span class="team-code" id="teamCode"></span>
+      </div>
+      <h2 class="detail-title" id="teamName"></h2>
+
+      <div class="detail-block">
+        <div class="detail-label team-label-row">
+          <span>Catégories de l'équipe</span>
+          <button class="mini-btn" id="btnAddTeamCat">+ Ajouter</button>
+        </div>
+        <div class="team-cats" id="teamCats"></div>
+      </div>
+
+      <div class="detail-block">
+        <div class="detail-label">Équipiers <span id="teamMemberCount">0</span></div>
+        <p class="detail-cat-hint">Cochez les catégories auxquelles chaque équipier a accès. Il ne verra que les mémos rangés dans celles-ci.</p>
+        <div class="team-members" id="teamMembers"></div>
+      </div>
+
+      <p class="login-note">Partagez le code d'invitation ci-dessus : à l'inscription, l'équipier choisit « Rejoindre » et le saisit.</p>
     </div>
   </div>
 
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=3"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.local.js" onerror="void 0"></script>
+<script src="config.js?v=3"></script>
+<script src="api.js?v=7"></script>
+<script src="streaming.js?v=3"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>

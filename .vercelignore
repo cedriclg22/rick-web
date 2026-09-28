@@ -1,2 +1,6 @@
 whisper-server/
 .git/
+config.local.js
+.DS_Store
+images/*.STEP
+images/*.step

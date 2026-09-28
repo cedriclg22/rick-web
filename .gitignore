@@ -1,5 +1,11 @@
 whisper-server/.venv/
+whisper-server/.env
 __pycache__/
 *.pyc
 .vercel
 .DS_Store
+.claude/
+config.local.js
+# fichiers CAO du produit : pas dans un repo public
+*.STEP
+supabase/.temp/
