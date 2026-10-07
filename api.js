@@ -91,22 +91,6 @@ const api = (() => {
     return data.session;
   }
 
-  // Connexion Google : Supabase redirige vers Google puis revient sur la page
-  // courante avec la session dans l'URL, que supabase-js récupère tout seul.
-  // L'adresse de retour doit figurer dans Authentication > URL Configuration.
-  async function signInWithGoogle(){
-    // Sans provider actif, Supabase afficherait une page d'erreur brute :
-    // on vérifie d'abord dans les réglages publics du projet.
-    const res = await fetch(cfg.supabaseUrl + '/auth/v1/settings', { headers:{ apikey: cfg.supabaseAnonKey } });
-    const settings = res.ok ? await res.json() : null;
-    if(settings && !(settings.external || {}).google) throw new Error('provider is not enabled');
-    const redirectTo = location.origin + location.pathname;
-    const { error } = await need().auth.signInWithOAuth({
-      provider: 'google', options: { redirectTo },
-    });
-    fail(error);
-  }
-
   /* -------------------------------------------------------------- chat -- */
   // Pose une question sur tous les mémos : la fonction rick-chat relit les
   // mémos côté serveur et renvoie la réponse de Claude en flux texte.
@@ -433,7 +417,7 @@ const api = (() => {
     configured,
     currentProfession,
     listDevices, createDevice, updateDevice, deleteDevice,
-    signUp, signIn, signInWithGoogle, signOut, askRick, currentSession, onAuthChange,
+    signUp, signIn, signOut, askRick, currentSession, onAuthChange,
     loadWorkspace,
     createCategory, updateCategory, deleteCategory,
     createTeam, joinTeam, promoteMember, setCategoryAccess,

@@ -118,6 +118,29 @@ let state = blankState();
 
 /* Le filtre de catégorie actif est un confort d'affichage : il reste local. */
 function prefKey(){ return 'rick_pref_' + (currentUser ? currentUser.id : 'anon'); }
+/* Un mémo qui vient d'être enregistré ou importé doit se voir tout de suite :
+   on lève le filtre de catégorie et la recherche qui le masqueraient, puis on
+   le fait briller en haut de la liste. */
+function revealNewMemo(id){
+  const m = findMemo(id);
+  if(state.activeCat && (!m || m.category !== state.activeCat)){
+    state.activeCat = null;
+    saveActiveCat();
+  }
+  if(chatInput.value.trim() && !chatAttached.length){
+    chatInput.value = ''; chatAutosize(); chatSync();
+  }
+  showView('library');
+  renderLibrary();
+  requestAnimationFrame(()=>{
+    const el = memoGrid.querySelector(`.memo-card[data-id="${id}"]`);
+    if(!el) return;
+    el.classList.add('is-new');
+    el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+    setTimeout(()=> el.classList.remove('is-new'), 2600);
+  });
+}
+
 function saveActiveCat(){
   try{ localStorage.setItem(prefKey(), state.activeCat || ''); }catch(e){}
 }
@@ -241,6 +264,7 @@ let currentView = 'library';
 function showView(name){
   currentView = name;
   document.body.dataset.view = name;   // le CSS affiche la saisie du chat selon l'onglet
+  if(typeof renderAttach === 'function') renderAttach();   // texte d'aide selon l'onglet
   views.forEach(v=>v.classList.toggle('active', v.id === 'view-'+name));
   navBtns.forEach(b=>b.classList.toggle('active', b.dataset.view === name));
   if(name === 'map') initMapIfNeeded();
@@ -279,7 +303,8 @@ function attachChip(a, removable){
 function renderAttach(){
   chatAttach.innerHTML = chatAttached.map(a=> attachChip(a, true)).join('');
   chatAttach.hidden = chatAttached.length === 0;
-  chatInput.placeholder = !chatAttached.length ? 'Demandez à Rick…'
+  chatInput.placeholder = !chatAttached.length
+    ? (currentView === 'library' ? 'Rechercher un mémo ou demander à Rick…' : 'Demandez à Rick…')
     : chatAttached.length === 1 ? 'Que voulez-vous savoir sur ce mémo ?' : 'Que voulez-vous savoir sur ces mémos ?';
   chatSync();
 }
@@ -454,7 +479,11 @@ async function askChat(question){
 }
 
 chatForm.addEventListener('submit', (e)=>{ e.preventDefault(); askChat(chatInput.value); });
-chatInput.addEventListener('input', ()=>{ chatAutosize(); chatSync(); });
+let searchTimer = 0;
+chatInput.addEventListener('input', ()=>{
+  chatAutosize(); chatSync();
+  if(currentView === 'library'){ clearTimeout(searchTimer); searchTimer = setTimeout(renderMemoGrid, 90); }
+});
 chatInput.addEventListener('keydown', (e)=>{
   if(e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); askChat(chatInput.value); }
 });
@@ -471,6 +500,140 @@ chatReset.addEventListener('click', ()=>{
 });
 chatSync();
 
+/* ============ FENÊTRES INTÉGRÉES ============
+   Remplacent prompt(), confirm() et alert() du navigateur : même style que
+   l'app, dans la page. Tout est asynchrone (Promise). */
+const uiLayer = document.createElement('div');
+uiLayer.className = 'ui-overlay';
+uiLayer.hidden = true;
+uiLayer.innerHTML = `<form class="ui-dialog" novalidate>
+    <div class="ui-title"></div>
+    <div class="ui-msg"></div>
+    <div class="ui-fields"></div>
+    <div class="ui-actions">
+      <button type="button" class="ui-btn ui-cancel">Annuler</button>
+      <button type="submit" class="ui-btn ui-ok">OK</button>
+    </div>
+  </form>`;
+document.body.appendChild(uiLayer);
+const toastBox = document.createElement('div');
+toastBox.className = 'ui-toasts';
+document.body.appendChild(toastBox);
+
+const UI_EMOJIS = ['🏷️','💼','🏠','❤️','👪','🩺','🐾','🛒','📞','💡','🎯','✈️','🎓','🏦','🔧','📚'];
+let uiResolve = null;
+
+function uiClose(value){
+  if(!uiResolve) return;
+  const res = uiResolve; uiResolve = null;
+  uiLayer.classList.add('closing');
+  setTimeout(()=>{ uiLayer.hidden = true; uiLayer.classList.remove('closing'); }, reduceMotionNow() ? 0 : 140);
+  res(value);
+}
+function reduceMotionNow(){ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+
+/* fields : [{ name, type:'text'|'emoji'|'toggle'|'choice', label, value, placeholder, required, options }]
+   Résout avec { name: valeur } ou null si annulé. Un champ « choice » valide au clic. */
+function uiDialog({ title='', message='', fields=[], ok='OK', cancel='Annuler', danger=false, hideCancel=false }={}){
+  if(uiResolve) uiClose(null);
+  const form = uiLayer.querySelector('.ui-dialog');
+  form.querySelector('.ui-title').textContent = title;
+  const msg = form.querySelector('.ui-msg');
+  msg.textContent = message; msg.hidden = !message;
+  const okBtn = form.querySelector('.ui-ok'), cancelBtn = form.querySelector('.ui-cancel');
+  okBtn.textContent = ok; okBtn.classList.toggle('danger', danger);
+  cancelBtn.textContent = cancel; cancelBtn.hidden = hideCancel;
+  const onlyChoices = fields.length && fields.every(f=> f.type === 'choice');
+  okBtn.hidden = !!onlyChoices;
+
+  const box = form.querySelector('.ui-fields');
+  box.innerHTML = fields.map(f=>{
+    const label = f.label ? `<label class="ui-label">${escapeHtml(f.label)}</label>` : '';
+    if(f.type === 'emoji'){
+      const list = UI_EMOJIS.includes(f.value) || !f.value ? UI_EMOJIS : [f.value, ...UI_EMOJIS];
+      return `${label}<div class="ui-emojis" data-name="${f.name}">${list.map(e=>
+        `<button type="button" class="ui-emoji ${e===(f.value||UI_EMOJIS[0])?'on':''}" data-v="${e}">${e}</button>`).join('')}</div>`;
+    }
+    if(f.type === 'toggle'){
+      return `${label}<div class="ui-toggle" data-name="${f.name}">${f.options.map(o=>
+        `<button type="button" class="ui-seg ${o.value===f.value?'on':''}" data-v="${o.value}">${escapeHtml(o.label)}</button>`).join('')}</div>`;
+    }
+    if(f.type === 'choice'){
+      return `${label}<div class="ui-choices" data-name="${f.name}">${f.options.map(o=>
+        `<button type="button" class="ui-choice ${o.value===f.value?'on':''}" data-v="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</button>`).join('')}</div>`;
+    }
+    return `${label}<input class="ui-input" data-name="${f.name}" type="text" autocomplete="off"
+      value="${escapeHtml(f.value || '')}" placeholder="${escapeHtml(f.placeholder || '')}" ${f.required ? 'data-required="1"' : ''}>`;
+  }).join('');
+
+  const collect = ()=>{
+    const out = {};
+    box.querySelectorAll('.ui-input').forEach(i=> out[i.dataset.name] = i.value.trim());
+    box.querySelectorAll('.ui-emojis,.ui-toggle').forEach(g=>{
+      const on = g.querySelector('.on'); out[g.dataset.name] = on ? on.dataset.v : '';
+    });
+    return out;
+  };
+  const sync = ()=>{
+    okBtn.disabled = [...box.querySelectorAll('.ui-input[data-required]')].some(i=> !i.value.trim());
+  };
+  box.querySelectorAll('.ui-input').forEach(i=> i.addEventListener('input', sync));
+  box.querySelectorAll('.ui-emojis,.ui-toggle').forEach(g=> g.addEventListener('click', (e)=>{
+    const b = e.target.closest('button'); if(!b) return;
+    g.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===b));
+  }));
+  box.querySelectorAll('.ui-choices').forEach(g=> g.addEventListener('click', (e)=>{
+    const b = e.target.closest('button'); if(!b) return;
+    uiClose({ ...collect(), [g.dataset.name]: b.dataset.v });
+  }));
+  sync();
+
+  uiLayer.hidden = false;
+  return new Promise(res=>{
+    uiResolve = res;
+    requestAnimationFrame(()=>{
+      const first = box.querySelector('.ui-input');
+      if(first){ first.focus(); first.select(); } else if(!okBtn.hidden) okBtn.focus();
+    });
+  });
+}
+uiLayer.querySelector('.ui-dialog').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const okBtn = uiLayer.querySelector('.ui-ok');
+  if(okBtn.disabled || okBtn.hidden) return;
+  const out = {};
+  uiLayer.querySelectorAll('.ui-input').forEach(i=> out[i.dataset.name] = i.value.trim());
+  uiLayer.querySelectorAll('.ui-emojis,.ui-toggle').forEach(g=>{
+    const on = g.querySelector('.on'); out[g.dataset.name] = on ? on.dataset.v : '';
+  });
+  uiClose(out);
+});
+uiLayer.querySelector('.ui-cancel').addEventListener('click', ()=> uiClose(null));
+uiLayer.addEventListener('click', (e)=>{ if(e.target === uiLayer) uiClose(null); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && !uiLayer.hidden){ e.stopPropagation(); uiClose(null); } }, true);
+
+function uiPrompt(title, { value='', placeholder='', message='', ok='Valider' }={}){
+  return uiDialog({ title, message, ok, fields:[{ name:'v', value, placeholder, required:true }] })
+    .then(r=> r ? r.v : null);
+}
+function uiConfirm(title, { message='', ok='Confirmer', cancel='Annuler', danger=false }={}){
+  return uiDialog({ title, message, ok, cancel, danger }).then(r=> !!r);
+}
+/* Messages : court → petite notification qui s'efface ; long → fenêtre. */
+function uiAlert(message){
+  message = String(message == null ? '' : message);
+  if(message.length > 110 || message.includes('\n')){
+    return uiDialog({ title:'', message, ok:'OK', hideCancel:true });
+  }
+  const t = document.createElement('div');
+  t.className = 'ui-toast';
+  t.textContent = message;
+  toastBox.appendChild(t);
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=> t.remove(), 250); }, 3800);
+  return Promise.resolve();
+}
+window.alert = uiAlert;
+
 /* ============ HEADER / DATE ============ */
 function fmtDateLine(d){
   const days=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
@@ -485,11 +648,18 @@ document.getElementById('todayLine').textContent = fmtDateLine(new Date());
 const catRow = document.getElementById('catRow');
 const memoGrid = document.getElementById('memoGrid');
 const libraryEmpty = document.getElementById('libraryEmpty');
-const librarySearch = document.getElementById('librarySearch');
 
 function renderCatRow(){
   const memos = allMemos();
-  catRow.innerHTML = visibleCategories().map(c=>{
+  // « Tous » en tête : sélectionné quand aucun filtre n'est actif.
+  const all = `<div class="cat-card cat-card-all ${state.activeCat ? '' : 'selected'}" data-cat-all="1" title="Voir tous les mémos">
+      <div>
+        <div class="cat-name">Tous</div>
+        <div class="cat-count">${memos.length} mémo${memos.length>1?'s':''}</div>
+      </div>
+      <div class="cat-deco">🎙️</div>
+    </div>`;
+  catRow.innerHTML = all + visibleCategories().map(c=>{
     const count = memos.filter(m=>m.category===c.id).length;
     const sel = state.activeCat===c.id ? 'selected':'';
     // catégorie d'équipe : seul l'admin peut la renommer ou la supprimer
@@ -512,6 +682,26 @@ function renderCatRow(){
       <div class="cat-add-icon">+</div>
       <div class="cat-add-label">Nouvelle</div>
     </div>`;
+
+  const allCard = catRow.querySelector('.cat-card-all');
+  allCard.addEventListener('click', ()=>{
+    state.activeCat = null;
+    saveActiveCat();
+    renderLibrary();
+  });
+  // Déposer un mémo sur « Tous » le sort de sa catégorie.
+  allCard.addEventListener('dragover', (e)=>{
+    if(!e.dataTransfer.types.includes(MEMO_DRAG_TYPE)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    allCard.classList.add('drag-over');
+  });
+  allCard.addEventListener('dragleave', ()=> allCard.classList.remove('drag-over'));
+  allCard.addEventListener('drop', (e)=>{
+    e.preventDefault();
+    allCard.classList.remove('drag-over');
+    const m = findMemo(e.dataTransfer.getData('text/plain'));
+    if(m && m.category) assignMemoCategory(m.id, m.category);   // même catégorie = on la retire
+  });
 
   catRow.querySelectorAll('.cat-card[data-cat]').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -543,24 +733,26 @@ function renderCatRow(){
   if(addEl) addEl.addEventListener('click', addCategory);
 }
 
-function promptCategoryFields(defName, defIcon){
-  const name = prompt('Nom de la catégorie :', defName || '');
-  if(name === null) return null;
-  const trimmed = name.trim();
-  if(!trimmed) return null;
-  const icon = (prompt('Emoji pour cette catégorie (laisser vide pour 🏷️) :', defIcon || '🏷️') || '🏷️').trim() || '🏷️';
-  return { name: trimmed, icon };
+// Une seule fenêtre : nom, emoji et, pour un admin, catégorie d'équipe ou perso.
+async function categoryDialog({ title, name='', icon='🏷️', teamName=null, ok='Créer' }){
+  const fields = [
+    { name:'name', label:'Nom', value:name, placeholder:'ex. Clients, Idées, Maison…', required:true },
+    { name:'icon', type:'emoji', label:'Emoji', value:icon || '🏷️' },
+  ];
+  if(teamName) fields.push({ name:'scope', type:'toggle', label:'Visible par', value:'perso', options:[
+    { value:'perso', label:'Moi seulement' }, { value:'team', label:`L'équipe « ${teamName} »` },
+  ]});
+  const r = await uiDialog({ title, fields, ok });
+  if(!r || !r.name) return null;
+  return { name: r.name, icon: r.icon || '🏷️', forTeam: r.scope === 'team' };
 }
 
 async function addCategory(){
   if(requireAccount('Créer une catégorie')) return;
   // un admin peut créer une catégorie d'équipe (partagée) ou une catégorie personnelle
-  let forTeam = false;
-  if(team && isAdmin()){
-    forTeam = confirm(`Catégorie d'équipe ?\n\nOK = catégorie de « ${team.name} » (visible par les équipiers que vous autorisez)\nAnnuler = catégorie personnelle`);
-  }
-  const fields = promptCategoryFields('', '🏷️');
+  const fields = await categoryDialog({ title:'Nouvelle catégorie', teamName: team && isAdmin() ? team.name : null });
   if(!fields) return;
+  const forTeam = fields.forTeam;
   try{
     const cat = await srv.createCategory({
       name: fields.name, icon: fields.icon, color: nextCustomColor(),
@@ -576,7 +768,7 @@ async function editCategory(id){
   const c = findCategory(id);
   if(!c) return;
   if(c.team && !isAdmin()){ alert("Seul l'admin de l'équipe peut modifier cette catégorie."); return; }
-  const fields = promptCategoryFields(c.name, c.icon);
+  const fields = await categoryDialog({ title:'Modifier la catégorie', name:c.name, icon:c.icon, ok:'Enregistrer' });
   if(!fields) return;
   const before = { name:c.name, icon:c.icon, deco:c.deco };
   c.name = fields.name; c.icon = fields.icon; c.deco = fields.icon;
@@ -597,7 +789,7 @@ async function deleteCategory(id){
   if(!c) return;
   if(c.team && !isAdmin()){ alert("Seul l'admin de l'équipe peut supprimer cette catégorie."); return; }
   const extra = c.team ? " Elle disparaîtra pour toute l'équipe." : '';
-  if(!confirm(`Supprimer la catégorie « ${c.name} » ?${extra} Les mémos associés deviendront non catégorisés.`)) return;
+  if(!await uiConfirm(`Supprimer « ${c.name} » ?`, { message:`Les mémos associés deviendront non catégorisés.${extra}`, ok:'Supprimer', danger:true })) return;
   try{
     await srv.deleteCategory(id);
     // en base : category_id passe à null (on delete set null) et les accès sont supprimés en cascade
@@ -621,11 +813,18 @@ function timeAgoLabel(iso){
 }
 
 function renderMemoGrid(){
-  const q = librarySearch.value.trim().toLowerCase();
+  // Sur la Library, la barre du bas filtre les mémos pendant qu'on tape
+  // (Entrée pose ensuite la question à Rick). Chaque mot doit apparaître.
+  const q = currentView === 'library' ? chatInput.value.trim().toLowerCase() : '';
+  const words = q.split(/\s+/).filter(Boolean);
   let list = allMemos().sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt));
   if(state.activeCat) list = list.filter(m=>m.category===state.activeCat);
-  if(q) list = list.filter(m => (m.title+' '+m.summary+' '+m.transcript).toLowerCase().includes(q));
+  if(words.length) list = list.filter(m=>{
+    const hay = (m.title+' '+m.summary+' '+m.transcript).toLowerCase();
+    return words.every(w=> hay.includes(w));
+  });
 
+  document.getElementById('recentLabel').textContent = words.length ? 'Résultats' : 'Récents';
   document.getElementById('recentCount').textContent = list.length;
   memoGrid.innerHTML = list.map(m=>{
     // Extrait : le résumé s'il existe, sinon le début de la transcription.
@@ -666,7 +865,8 @@ function renderMemoGrid(){
   if(total>0 && list.length===0){
     libraryEmpty.hidden = false;
     document.getElementById('libraryEmpty').querySelector('.empty-title').textContent = 'Aucun résultat';
-    document.getElementById('libraryEmpty').querySelector('.empty-caption').textContent = 'Essayez une autre recherche ou catégorie.';
+    document.getElementById('libraryEmpty').querySelector('.empty-caption').textContent = words.length
+      ? 'Appuyez sur Entrée pour poser la question à Rick.' : 'Essayez une autre catégorie.';
   } else if(total===0){
     document.getElementById('libraryEmpty').querySelector('.empty-title').textContent = 'Aucun mémo';
     document.getElementById('libraryEmpty').querySelector('.empty-caption').textContent = 'Appuyez sur le micro pour enregistrer votre premier mémo.';
@@ -709,7 +909,6 @@ function renderLibrary(){
   renderCatRow();
   renderMemoGrid();
 }
-librarySearch.addEventListener('input', renderMemoGrid);
 
 function escapeHtml(s){
   return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -903,7 +1102,7 @@ async function assignMemoCategory(memoId, catId){
   }
 }
 
-function deleteMemo(id){
+async function deleteMemo(id){
   if(requireAccount('Supprimer un mémo')) return;
   const m = findMemo(id);
   if(!m) return;
@@ -911,7 +1110,7 @@ function deleteMemo(id){
     alert("Seul l'auteur du mémo ou l'admin de l'équipe peut le supprimer.");
     return;
   }
-  if(!confirm(`Supprimer « ${memoTitle(m)} » ? Cette action est irréversible.`)) return;
+  if(!await uiConfirm(`Supprimer « ${memoTitle(m)} » ?`, { message:'Cette action est irréversible.', ok:'Supprimer', danger:true })) return;
   if(playingId===id){ playerAudio.pause(); playingId=null; }
   const snapshot = state.memos;
   state.memos = state.memos.filter(x=>x.id!==id);
@@ -1231,63 +1430,102 @@ function renderStore(){
 document.getElementById('storeSearch').addEventListener('input', renderStore);
 
 /* ============ MAP ============ */
-let map, mapInited=false, addModeOn=false, reminderMarkers=[];
+let map, mapInited=false, addModeOn=false, reminderMarkers=[], meMarker=null;
+const DESKTOP = window.matchMedia('(min-width:900px)');
+
+// Épingle lime (rappel) et point pulsant (ma position), dessinés en CSS.
+const pinIcon = ()=> L.divIcon({ className:'rick-pin', html:'<span></span>', iconSize:[30,38], iconAnchor:[15,36], popupAnchor:[0,-32] });
+const meIcon  = ()=> L.divIcon({ className:'rick-me', html:'<span></span>', iconSize:[22,22], iconAnchor:[11,11] });
+
 function initMapIfNeeded(){
-  if(mapInited) return;
+  if(mapInited){ setTimeout(()=> map.invalidateSize(), 0); return; }
   mapInited = true;
-  map = L.map('mapEl', { zoomControl:false, attributionControl:true }).setView([48.85, 5], 5);
+  map = L.map('mapEl', { zoomControl:false, attributionControl:true }).setView([46.6, 2.4], 6);
+  // OpenStreetMap passé en gris clair par CSS (.leaflet-tile-pane) : un fond
+  // sobre qui laisse la vedette aux épingles lime, sans clé d'API.
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap'
   }).addTo(map);
+  map.attributionControl.setPrefix(false);
 
-  map.on('click', (e)=>{
+  map.on('click', async (e)=>{
     if(!addModeOn) return;
+    setAddMode(false);
     if(requireAccount('Poser un rappel de lieu')) return;
-    const label = prompt('Nom du rappel de lieu ?');
-    if(label){
-      srv.addReminder({ name: label, lat: e.latlng.lat, lng: e.latlng.lng }, currentUser.id)
-        .then(r=>{ state.reminders.push(r); renderReminders(); })
+    const label = await uiPrompt('Nouveau rappel de lieu', { placeholder:'ex. Garage, Pharmacie, Bureau…', ok:'Poser le rappel' });
+    if(label && label.trim()){
+      srv.addReminder({ name: label.trim(), lat: e.latlng.lat, lng: e.latlng.lng }, currentUser.id)
+        .then(r=>{ state.reminders.push(r); renderReminders(); focusReminder(r.id); })
         .catch(err=>reportError(err, 'Ajout du rappel'));
     }
-    addModeOn = false;
-    document.getElementById('btnAddReminder').style.filter = '';
   });
 
+  // Sur desktop la liste est ouverte d'emblée, sur mobile elle reste repliée.
+  setSheet(DESKTOP.matches);
   renderReminders();
+  if(state.reminders.length){
+    map.fitBounds(L.latLngBounds(state.reminders.map(r=>[r.lat, r.lng])).pad(0.4), { maxZoom: 14 });
+  }
+  setTimeout(()=> map.invalidateSize(), 0);
 }
 
-document.getElementById('btnLocate').addEventListener('click', ()=>{
+function setAddMode(on){
+  addModeOn = on;
+  document.getElementById('btnAddReminder').classList.toggle('active', on);
+  document.getElementById('mapAddHint').hidden = !on;
+  document.getElementById('mapEl').classList.toggle('adding', on);
+}
+document.getElementById('btnAddReminder').addEventListener('click', ()=> setAddMode(!addModeOn));
+document.getElementById('mapAddCancel').addEventListener('click', ()=> setAddMode(false));
+document.getElementById('btnZoomIn').addEventListener('click', ()=> map && map.zoomIn());
+document.getElementById('btnZoomOut').addEventListener('click', ()=> map && map.zoomOut());
+
+document.getElementById('btnLocate').addEventListener('click', (e)=>{
   if(!navigator.geolocation){ alert('Géolocalisation non disponible.'); return; }
+  const btn = e.currentTarget;
+  btn.classList.add('busy');
   navigator.geolocation.getCurrentPosition(pos=>{
+    btn.classList.remove('busy');
     const { latitude, longitude } = pos.coords;
-    map.setView([latitude, longitude], 13);
-    L.circleMarker([latitude, longitude], { radius:8, color:'#171512', weight:2, fillColor:'#d6ff4a', fillOpacity:1 }).addTo(map)
-      .bindPopup('Vous êtes ici').openPopup();
+    map.flyTo([latitude, longitude], 14, { duration: 1.1 });
+    if(meMarker) map.removeLayer(meMarker);
+    meMarker = L.marker([latitude, longitude], { icon: meIcon(), keyboard:false }).addTo(map)
+      .bindPopup('Vous êtes ici');
   }, err=>{
-    alert("Impossible d'obtenir votre position: " + err.message);
+    btn.classList.remove('busy');
+    alert("Impossible d'obtenir votre position : " + err.message);
   });
 });
 
-document.getElementById('btnAddReminder').addEventListener('click', (e)=>{
-  addModeOn = !addModeOn;
-  e.currentTarget.style.filter = addModeOn ? 'brightness(0.85)' : '';
-  if(addModeOn) alert('Touchez un point sur la carte pour poser un rappel de lieu.');
-});
+function focusReminder(id){
+  const i = state.reminders.findIndex(r=> r.id === id);
+  if(i < 0) return;
+  const r = state.reminders[i];
+  map.flyTo([r.lat, r.lng], Math.max(map.getZoom(), 15), { duration: 1 });
+  map.once('moveend', ()=> reminderMarkers[i] && reminderMarkers[i].openPopup());
+  if(!DESKTOP.matches) setSheet(false);
+}
 
 function renderReminders(){
-  reminderMarkers.forEach(m=>map.removeLayer(m));
-  reminderMarkers = [];
-  state.reminders.forEach(r=>{
-    const marker = L.marker([r.lat, r.lng]).addTo(map).bindPopup(escapeHtml(r.name));
-    reminderMarkers.push(marker);
+  if(map){
+    reminderMarkers.forEach(m=>map.removeLayer(m));
+    reminderMarkers = state.reminders.map(r=>
+      L.marker([r.lat, r.lng], { icon: pinIcon(), title: r.name }).addTo(map).bindPopup(escapeHtml(r.name)));
+  }
+  const n = state.reminders.length;
+  document.getElementById('reminderSub').textContent = n
+    ? `${n} lieu${n>1?'x':''} enregistré${n>1?'s':''}` : 'Aucun lieu enregistré';
+  document.getElementById('reminderList').innerHTML = n
+    ? state.reminders.map(r=>
+        `<div class="reminder-item" data-id="${r.id}">
+          <button type="button" class="reminder-go" data-id="${r.id}"><span class="reminder-pin"></span><span class="reminder-name">${escapeHtml(r.name)}</span></button>
+          <button type="button" class="reminder-del" data-id="${r.id}" title="Supprimer" aria-label="Supprimer">×</button>
+        </div>`).join('')
+    : `<div class="reminder-empty">Posez un rappel sur la carte : Rick vous le rappellera en arrivant sur place.</div>`;
+  document.querySelectorAll('.reminder-go').forEach(btn=>{
+    btn.addEventListener('click', ()=> focusReminder(btn.dataset.id));
   });
-  document.getElementById('reminderSub').textContent = state.reminders.length
-    ? `${state.reminders.length} lieu${state.reminders.length>1?'x':''} enregistré${state.reminders.length>1?'s':''}`
-    : 'Aucun lieu enregistré';
-  document.getElementById('reminderList').innerHTML = state.reminders.map(r=>
-    `<div class="reminder-item"><span class="reminder-name">📍 ${escapeHtml(r.name)}</span><button class="reminder-del" data-id="${r.id}">✕</button></div>`
-  ).join('');
   document.querySelectorAll('.reminder-del').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = btn.dataset.id;
@@ -1303,11 +1541,12 @@ function renderReminders(){
 }
 
 let sheetExpanded = false;
-document.getElementById('mapSheetToggle').addEventListener('click', ()=>{
-  sheetExpanded = !sheetExpanded;
-  document.getElementById('reminderList').hidden = !sheetExpanded;
-  document.getElementById('sheetChevron').textContent = sheetExpanded ? '⌄' : '⌃';
-});
+function setSheet(open){
+  sheetExpanded = open;
+  document.getElementById('reminderList').hidden = !open;
+  document.getElementById('mapSheet').classList.toggle('open', open);
+}
+document.getElementById('mapSheetToggle').addEventListener('click', ()=> setSheet(!sheetExpanded));
 
 /* ============ RECORDING ============ */
 const WHISPER_URL = 'http://127.0.0.1:5959';
@@ -1960,8 +2199,7 @@ async function importAudioFile(file){
   catch(err){ reportError(err, "Import de l'audio"); return; }
   memo.authorName = currentUser.name;
   state.memos.unshift(memo);
-  showView('library');
-  renderLibrary();
+  revealNewMemo(memo.id);
 
   const refresh = ()=>{
     if(currentView === 'library') renderLibrary();
@@ -2103,10 +2341,9 @@ async function pickBluetoothName(){
 
 async function pairDevice(){
   const suggested = await pickBluetoothName();
-  const label = prompt(
-    "Emplacement ou personne pour ce Rick\n(ex. « Salle réunion 1 », « Rick de Julie »)",
-    suggested || ''
-  );
+  const label = await uiPrompt('Nommer ce Rick', {
+    message:'Un emplacement ou une personne.', placeholder:'ex. Salle réunion 1, Rick de Julie', value: suggested || '', ok:'Appairer',
+  });
   if(label === null) return;
   const name = label.trim();
   if(!name){ alert('Donnez un libellé à cet appareil.'); return; }
@@ -2120,7 +2357,7 @@ async function pairDevice(){
     });
     devices.push(dev);
     renderDevices();
-    if(confirm(`« ${name} » est appairé.\n\nCréer une catégorie du même nom pour ranger ses enregistrements ?`)){
+    if(await uiConfirm(`« ${name} » est appairé`, { message:'Créer une catégorie du même nom pour ranger ses enregistrements ?', ok:'Créer la catégorie', cancel:'Plus tard' })){
       await createCategoryForDevice(dev);
     }
   }catch(err){ reportError(err, "Appairage de l'appareil"); }
@@ -2148,7 +2385,7 @@ async function createCategoryForDevice(dev){
 async function renameDevice(id){
   const dev = devices.find(d=>d.id===id);
   if(!dev) return;
-  const label = prompt("Emplacement ou personne", dev.label);
+  const label = await uiPrompt('Renommer ce Rick', { value: dev.label, placeholder:'Emplacement ou personne', ok:'Renommer' });
   if(label === null) return;
   const name = label.trim();
   if(!name) return;
@@ -2165,18 +2402,14 @@ async function assignDeviceCategory(id){
   const dev = devices.find(d=>d.id===id);
   if(!dev) return;
   const cats = visibleCategories();
-  const lines = cats.map((c,i)=>`${i+1}. ${c.icon} ${c.name}`).join('\n');
-  const answer = prompt(
-    `Catégorie pour « ${dev.label} »\n\n${lines || '(aucune catégorie)'}\n\n` +
-    `Tapez un numéro, 0 pour aucune, ou N pour créer « ${dev.label} ».`,
-    ''
-  );
-  if(answer === null) return;
-  const a = answer.trim().toUpperCase();
-  if(a === 'N'){ await createCategoryForDevice(dev); return; }
-  const n = parseInt(a, 10);
-  if(isNaN(n) || n < 0 || n > cats.length) return;
-  const catId = n === 0 ? null : cats[n-1].id;
+  const r = await uiDialog({ title:`Catégorie de « ${dev.label} »`, fields:[{ name:'cat', type:'choice', value: dev.categoryId || '', options:[
+    ...cats.map(c=> ({ value:c.id, label:`${c.icon} ${c.name}` })),
+    { value:'', label:'Aucune catégorie' },
+    { value:'__new', label:`＋ Créer « ${dev.label} »` },
+  ]}]});
+  if(!r) return;
+  if(r.cat === '__new'){ await createCategoryForDevice(dev); return; }
+  const catId = r.cat || null;
   try{
     await srv.updateDevice(id, { label:dev.label, kind:dev.kind, categoryId:catId }, currentUser.id);
     dev.categoryId = catId;
@@ -2187,7 +2420,7 @@ async function assignDeviceCategory(id){
 async function unpairDevice(id){
   const dev = devices.find(d=>d.id===id);
   if(!dev) return;
-  if(!confirm(`Retirer « ${dev.label} » ?\nLa catégorie et les mémos sont conservés.`)) return;
+  if(!await uiConfirm(`Retirer « ${dev.label} » ?`, { message:'La catégorie et les mémos sont conservés.', ok:'Retirer', danger:true })) return;
   try{
     await srv.deleteDevice(id, currentUser.id);
     devices = devices.filter(d=>d.id!==id);
@@ -2290,8 +2523,7 @@ document.getElementById('btnFinish').addEventListener('click', ()=>{
     }
     memo.authorName = currentUser.name;
     state.memos.unshift(memo);
-    showView('library');
-    renderLibrary();
+    revealNewMemo(memo.id);
 
     if(!hasBlob) return;
 
@@ -2416,29 +2648,7 @@ loginForm.addEventListener('submit', async (e)=>{
   }
 });
 
-document.getElementById('googleBtn').addEventListener('click', async (e)=>{
-  const btn = e.currentTarget;
-  showAuthError(loginError, '');
-  btn.disabled = true;
-  try{
-    await srv.signInWithGoogle();   // la page part chez Google
-  }catch(err){
-    btn.disabled = false;
-    const msg = /provider is not enabled/i.test(err.message || '')
-      ? "La connexion Google n'est pas encore activée." : (err.message || 'Connexion Google impossible.');
-    showAuthError(loginForm.hidden ? signupError : loginError, msg);
-  }
-});
 
-/* Retour de Google en erreur (refus, provider mal configuré…) : l'erreur
-   arrive dans l'URL, on l'affiche dans la fenêtre de connexion. */
-function oauthErrorFromUrl(){
-  const p = new URLSearchParams(location.hash.slice(1) + '&' + location.search.slice(1));
-  const msg = p.get('error_description');
-  if(!msg) return null;
-  history.replaceState(null, '', location.pathname);
-  return msg.replace(/\+/g, ' ');
-}
 
 /* Charge le workspace complet depuis Supabase et ouvre l'app. */
 /* Le catalogue évolue (nouveaux connecteurs métier) alors que le compte a un
@@ -2502,7 +2712,7 @@ function roleLabel(profile){
 
 function refreshIdentity(){
   if(!currentUser) return;
-  document.querySelector('.greeting').innerHTML = 'Bonjour, <em>' + escapeHtml(currentUser.name) + '</em>';
+  document.querySelector('.greeting').innerHTML = 'Bonjour <em>' + escapeHtml(currentUser.name) + '</em>';
 }
 
 function openAccountPanel(){
@@ -2538,7 +2748,7 @@ document.getElementById('btnLogout').addEventListener('click', ()=>{ logout().ca
 document.getElementById('btnManageTeam').addEventListener('click', ()=>{ accountOverlay.hidden = true; openTeamPanel(); });
 
 document.getElementById('btnCreateTeam').addEventListener('click', async ()=>{
-  const name = prompt("Nom de votre équipe :");
+  const name = await uiPrompt('Créer une équipe', { placeholder:"Nom de l'équipe", ok:'Créer' });
   if(name === null || !name.trim()) return;
   try{
     const t = await srv.createTeam(name.trim());
@@ -2550,7 +2760,7 @@ document.getElementById('btnCreateTeam').addEventListener('click', async ()=>{
 });
 
 document.getElementById('btnJoinTeam').addEventListener('click', async ()=>{
-  const code = prompt("Code d'invitation de l'équipe (ex. RICK-4821) :");
+  const code = await uiPrompt('Rejoindre une équipe', { placeholder:"Code d'invitation, ex. RICK-4821", ok:'Rejoindre' });
   if(code === null || !code.trim()) return;
   try{
     const t = await srv.joinTeam(code.trim());
@@ -2634,7 +2844,7 @@ function renderTeamPanel(){
     b.addEventListener('click', async ()=>{
       const member = members.find(a=>a.id===b.dataset.promote);
       if(!member) return;
-      if(!confirm(`Donner le rôle admin à ${member.name} ? Il aura accès à toutes les catégories de l'équipe et pourra les gérer.`)) return;
+      if(!await uiConfirm(`Donner le rôle admin à ${member.name} ?`, { message:"Il aura accès à toutes les catégories de l'équipe et pourra les gérer.", ok:'Donner le rôle' })) return;
       try{
         await srv.promoteMember(member.id);
         member.role = 'admin';
@@ -2692,7 +2902,7 @@ const DEMO_STUBS = {
 };
 
 // La connexion part de la démo : elle doit toujours toucher le vrai backend.
-const AUTH_KEYS = new Set(['signIn', 'signUp', 'signInWithGoogle', 'currentSession']);
+const AUTH_KEYS = new Set(['signIn', 'signUp', 'currentSession']);
 
 const srv = new Proxy({}, {
   get(_, key){
@@ -2877,7 +3087,5 @@ async function boot(){
   }
   // Pas de session : on ouvre la démo plutôt qu'un mur de connexion.
   enterDemo();
-  const oauthErr = oauthErrorFromUrl();
-  if(oauthErr){ openLoginPopup(); showAuthError(loginError, 'Connexion Google : ' + oauthErr); }
 }
 boot();

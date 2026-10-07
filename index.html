@@ -6,12 +6,12 @@
 <title>Rick</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,600;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<!-- Cooper Hewitt (libre) : « Bonjour, prénom » -->
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,600;1,700&family=Inter:wght@400;500;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+<!-- Cooper Hewitt (libre) : « Bonjour prénom » -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cooper-hewitt@5.3.0/700.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cooper-hewitt@5.3.0/700-italic.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="styles.css?v=28">
+<link rel="stylesheet" href="styles.css?v=37">
 </head>
 <body>
 
@@ -27,12 +27,6 @@
         <button type="button" class="auth-tab active" data-auth="login">Connexion</button>
         <button type="button" class="auth-tab" data-auth="signup">Créer un compte</button>
       </div>
-
-      <button type="button" class="google-btn" id="googleBtn">
-        <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
-        <span>Continuer avec Google</span>
-      </button>
-      <div class="auth-sep"><span>ou</span></div>
 
       <form id="loginForm" class="auth-form">
         <input type="email" id="loginEmail" class="login-input" placeholder="votre@email.com" required autocomplete="email">
@@ -100,12 +94,7 @@
     <section class="view" id="view-library">
       <div class="view-scroll">
         <div class="date-line" id="todayLine">—</div>
-        <h1 class="greeting">Bonjour, <em>Cédric</em></h1>
-
-        <div class="searchbar">
-          <span class="search-icon">⌕</span>
-          <input type="text" id="librarySearch" placeholder="Rechercher un enregistrement…">
-        </div>
+        <h1 class="greeting">Bonjour <em>Cédric</em></h1>
 
         <div class="section-head">
           <span class="section-label">Catégories</span>
@@ -114,7 +103,7 @@
         <div class="cat-row" id="catRow"></div>
 
         <div class="section-head">
-          <span class="section-label">Récents <span id="recentCount">0</span></span>
+          <span class="section-label"><span class="lbl" id="recentLabel">Récents</span> <span id="recentCount">0</span></span>
         </div>
 
         <div class="memo-grid" id="memoGrid"></div>
@@ -189,8 +178,20 @@
     <!-- MAP -->
     <section class="view" id="view-map">
       <div id="mapEl"></div>
-      <button class="map-fab map-fab-locate" id="btnLocate" title="Me localiser">◎</button>
-      <button class="map-fab map-fab-add" id="btnAddReminder" title="Ajouter un rappel de lieu">🔔</button>
+
+      <!-- mode ajout : bandeau à la place d'une alerte -->
+      <div class="map-add-hint" id="mapAddHint" hidden>
+        <span class="map-add-hint-dot"></span>Touchez la carte pour poser le rappel
+        <button type="button" id="mapAddCancel">Annuler</button>
+      </div>
+
+      <div class="map-tools">
+        <button type="button" class="map-tool" id="btnZoomIn" title="Zoomer" aria-label="Zoomer">+</button>
+        <button type="button" class="map-tool" id="btnZoomOut" title="Dézoomer" aria-label="Dézoomer">−</button>
+        <span class="map-tools-sep"></span>
+        <button type="button" class="map-tool" id="btnLocate" title="Me localiser" aria-label="Me localiser"><span class="map-locate-ico"></span></button>
+      </div>
+      <button type="button" class="map-add" id="btnAddReminder" title="Ajouter un rappel de lieu"><span>＋</span> Rappel de lieu</button>
 
       <div class="map-sheet" id="mapSheet">
         <div class="sheet-handle"></div>
@@ -199,10 +200,7 @@
             <div class="sheet-title">Rappels de lieu</div>
             <div class="sheet-sub" id="reminderSub">Aucun lieu enregistré</div>
           </div>
-          <div class="sheet-actions">
-            <span class="shield">🛡️</span>
-            <span class="chevron" id="sheetChevron">⌃</span>
-          </div>
+          <span class="chevron" id="sheetChevron">⌃</span>
         </div>
         <div class="reminder-list" id="reminderList" hidden></div>
       </div>
@@ -236,7 +234,7 @@
       <div class="chat-drop-hint" aria-hidden="true">Déposez le mémo pour interroger Rick</div>
       <textarea id="chatInput" rows="1" placeholder="Demandez à Rick…" autocomplete="off"></textarea>
       <button type="button" class="chat-reset" id="chatReset" title="Nouvelle conversation" hidden>↺</button>
-      <button type="submit" class="chat-send" id="chatSend" title="Envoyer" aria-label="Envoyer">↑</button>
+      <button type="submit" class="chat-send" id="chatSend" title="Envoyer" aria-label="Envoyer"><span class="chat-send-ico"></span></button>
     </form>
     <!-- Importer un audio : pendant gris du disque d'enregistrement (desktop) -->
     <button class="import-fab" id="btnImport" title="Importer un fichier audio" aria-label="Importer un fichier audio">
@@ -412,8 +410,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.local.js" onerror="void 0"></script>
 <script src="config.js?v=3"></script>
-<script src="api.js?v=7"></script>
+<script src="api.js?v=8"></script>
 <script src="streaming.js?v=3"></script>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>
